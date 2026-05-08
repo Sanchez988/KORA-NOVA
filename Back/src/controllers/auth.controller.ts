@@ -137,8 +137,10 @@ export const register = async (req: AuthRequest, res: Response, next: NextFuncti
       }
     }
 
-    // En desarrollo, auto-verificar para evitar bloqueo por email no configurado
-    const isDevMode = config.env !== 'production';
+    // Si no hay SMTP configurado, evitamos bloquear el flujo de pruebas con verificación por correo.
+    // En producción real conviene configurar EMAIL_* para exigir verificación por email.
+    const emailConfigured = !!(config.email.user && config.email.password);
+    const isDevMode = config.env !== 'production' || !emailConfigured;
 
     // Crear usuario en base de datos local
     const user = await prisma.user.create({
