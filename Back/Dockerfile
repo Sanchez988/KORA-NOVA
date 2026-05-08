@@ -27,6 +27,7 @@ COPY --from=deps /app/package*.json ./
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
 COPY --from=deps /app/dist ./dist
+COPY openapi.yaml ./openapi.yaml
 
 EXPOSE 5000
 
