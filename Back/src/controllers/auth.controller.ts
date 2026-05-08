@@ -137,10 +137,19 @@ export const register = async (req: AuthRequest, res: Response, next: NextFuncti
       }
     }
 
-    // Si no hay SMTP configurado, evitamos bloquear el flujo de pruebas con verificación por correo.
-    // En producción real conviene configurar EMAIL_* para exigir verificación por email.
+    // Control de verificación por correo:
+    // - EMAIL_VERIFICATION_REQUIRED=true  => exige verificación (si SMTP disponible)
+    // - EMAIL_VERIFICATION_REQUIRED=false => auto-verifica siempre (útil para pruebas)
     const emailConfigured = !!(config.email.user && config.email.password);
-    const isDevMode = config.env !== 'production' || !emailConfigured;
+    const shouldRequireEmailVerification =
+      config.emailVerificationRequired && emailConfigured;
+    const isDevMode = !shouldRequireEmailVerification;
+
+    if (config.emailVerificationRequired && !emailConfigured) {
+      logger.warn(
+        'EMAIL_VERIFICATION_REQUIRED=true pero EMAIL_USER/EMAIL_PASSWORD no están configurados; se auto-verificará temporalmente.'
+      );
+    }
 
     // Crear usuario en base de datos local
     const user = await prisma.user.create({
@@ -154,8 +163,8 @@ export const register = async (req: AuthRequest, res: Response, next: NextFuncti
       },
     });
 
-    // Solo enviar email en producción (o si el email está configurado)
-    if (!isDevMode) {
+    // Solo enviar email cuando la verificación está activa.
+    if (shouldRequireEmailVerification) {
       await sendEmail({
         to: email,
         subject: 'Verifica tu correo electrónico - Kora',
@@ -245,7 +254,17 @@ export const login = async (req: AuthRequest, res: Response, next: NextFunction)
     }
 
     if (!sessionUser.verified) {
-      throw new AppError('Por favor verifica tu email primero', 403);
+      if (!config.emailVerificationRequired) {
+        sessionUser = await prisma.user.update({
+          where: { id: sessionUser.id },
+          data: { verified: true, verificationToken: null },
+        });
+        logger.info(
+          `Auto-verificación en login (EMAIL_VERIFICATION_REQUIRED=false): ${normalizedEmail}`
+        );
+      } else {
+        throw new AppError('Por favor verifica tu email primero', 403);
+      }
     }
 
     // Generar tokens
