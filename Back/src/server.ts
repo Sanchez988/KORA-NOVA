@@ -21,6 +21,7 @@ import uploadRoutes from './routes/upload.routes';
 import locationRoutes from './routes/location.routes';
 import storyRoutes from './routes/story.routes';
 import planRoutes from './routes/plan.routes';
+import { setupSwagger } from './swagger';
 
 // Inicializar Firebase (opcional)
 initializeFirebase();
@@ -65,6 +66,9 @@ app.use(rateLimiter);
 app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
+
+// Documentación OpenAPI (Swagger UI)
+setupSwagger(app);
 
 // API Routes
 app.use('/api/auth', authRoutes);
@@ -126,6 +130,7 @@ httpServer.listen(PORT, HOST, () => {
   logger.info(`🚀 Servidor corriendo en ${HOST}:${PORT}`);
   logger.info(`🌐 Ambiente: ${config.env}`);
   logger.info(`📡 URL publicada en config: ${config.apiUrl}`);
+  logger.info(`📚 Swagger UI: ${config.apiUrl}/api/docs`);
 });
 
 // Errores no capturados: en dev no salimos (un reject de libs como Cloudinary tumbaría el API en :5000).
