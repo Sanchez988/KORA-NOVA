@@ -1,0 +1,82 @@
+{
+  "expo": {
+    "name": "Kora",
+    "owner": "valentina000098",
+    "slug": "kora-nova-1",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "kora",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#121223"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kora.mobile",
+      "infoPlist": {
+        "NSPhotoLibraryAddUsageDescription": "Kora guarda en tu galería las fotos del chat cuando eliges guardarlas.",
+        "NSPhotoLibraryUsageDescription": "Kora usa tu galería para elegir fotos de perfil y del chat.",
+        "NSCameraUsageDescription": "Kora usa la cámara para tomar fotos de tu perfil durante el registro."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B0E14"
+      },
+      "package": "com.kora.mobile",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
+    },
+    "updates": {
+      "enabled": false
+    },
+    "newArchEnabled": false,
+    "extra": {
+      "eas": {
+        "projectId": "fbfca8e0-b37a-4590-a72b-1f8fcaef3e29"
+      }
+    },
+    "plugins": [
+      "expo-dev-client",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Kora usa tu galería para que puedas adjuntar imágenes en el chat.",
+          "savePhotosPermission": "Kora puede guardar en tu galería las fotos del chat cuando lo solicites."
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ]
+  }
+}

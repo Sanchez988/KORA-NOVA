@@ -1,0 +1,259 @@
+// Kora — esquema Prisma alineado con PostgreSQL (DATABASE_URL en .env.example)
+// Los campos JSON embebidos (photos, interests, hobbies en Profile; images en Message) se guardan como TEXT con JSON.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String    @map("password_hash")
+  dateOfBirth       DateTime  @map("date_of_birth")
+  verified          Boolean   @default(false)
+  verificationToken String?   @map("verification_token")
+  resetToken        String?   @map("reset_token")
+  resetTokenExpiry  DateTime? @map("reset_token_expiry")
+  firebaseUid       String?   @unique @map("firebase_uid")
+
+  isActive          Boolean   @default(true) @map("is_active")
+  isBanned          Boolean   @default(false) @map("is_banned")
+  banReason         String?   @map("ban_reason")
+  locationEnabled   Boolean   @default(true) @map("location_enabled")
+
+  loginAttempts     Int       @default(0) @map("login_attempts")
+  lockUntil         DateTime? @map("lock_until")
+  lastLogin         DateTime? @map("last_login")
+
+  legalConsentVersion String? @map("legal_consent_version")
+
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  deletedAt         DateTime? @map("deleted_at")
+
+  profile           Profile?
+  likesGiven        Like[]    @relation("LikesGiven")
+  likesReceived     Like[]    @relation("LikesReceived")
+  matchesAsUser1    Match[]   @relation("MatchUser1")
+  matchesAsUser2    Match[]   @relation("MatchUser2")
+  messages          Message[]
+  reportsGiven      Report[]  @relation("ReportsGiven")
+  reportsReceived   Report[]  @relation("ReportsReceived")
+  location          Location?
+  stories           Story[]
+  plansCreated      Plan[]            @relation("PlansCreated")
+  planParticipations PlanParticipant[] @relation("PlanParticipations")
+
+  @@map("users")
+}
+
+model Profile {
+  id              String           @id @default(uuid())
+  userId          String           @unique @map("user_id")
+  name            String
+  bio             String?
+  gender          String
+  program         String
+  semester        Int?
+  photos          String           @default("[]")
+  interests       String           @default("[]")
+  hobbies         String           @default("[]")
+  relationshipGoal String          @map("relationship_goal")
+
+  minAge          Int              @default(18) @map("min_age")
+  maxAge          Int              @default(30) @map("max_age")
+  maxDistance     Int?             @map("max_distance")
+  showMeTo        String           @default("ALL") @map("show_me_to")
+
+  showLastSeen    Boolean          @default(true) @map("show_last_seen")
+  showDistance    Boolean          @default(true) @map("show_distance")
+  incognitoMode   Boolean          @default(false) @map("incognito_mode")
+  incognitoUntil  DateTime?        @map("incognito_until")
+
+  completeness    Int              @default(0)
+
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model Location {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  latitude  Float
+  longitude Float
+  accuracy  Float?
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("locations")
+}
+
+model Like {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  targetUserId String   @map("target_user_id")
+  isSuperLike  Boolean  @default(false) @map("is_super_like")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user         User     @relation("LikesGiven", fields: [userId], references: [id], onDelete: Cascade)
+  targetUser   User     @relation("LikesReceived", fields: [targetUserId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetUserId])
+  @@index([userId])
+  @@index([targetUserId])
+  @@map("likes")
+}
+
+model Match {
+  id          String    @id @default(uuid())
+  user1Id     String    @map("user1_id")
+  user2Id     String    @map("user2_id")
+  matchedAt   DateTime  @default(now()) @map("matched_at")
+  isActive    Boolean   @default(true) @map("is_active")
+  unmatchedAt DateTime? @map("unmatched_at")
+  unmatchedBy String?   @map("unmatched_by")
+
+  user1       User      @relation("MatchUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2       User      @relation("MatchUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+  messages    Message[]
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+  @@map("matches")
+}
+
+model Message {
+  id              String    @id @default(uuid())
+  matchId         String    @map("match_id")
+  senderId        String    @map("sender_id")
+  content         String
+  images          String    @default("[]")
+  attachmentNames String    @default("[]") @map("attachment_names")
+  attachmentTypes String    @default("[]") @map("attachment_types")
+  isRead          Boolean   @default(false) @map("is_read")
+  readAt          DateTime? @map("read_at")
+  deletedAt       DateTime? @map("deleted_at")
+  sentAt          DateTime  @default(now()) @map("sent_at")
+
+  match           Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sender          User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([senderId])
+  @@map("messages")
+}
+
+model Report {
+  id             String    @id @default(uuid())
+  reporterId     String    @map("reporter_id")
+  reportedUserId String    @map("reported_user_id")
+  reason         String
+  description    String?
+  status         String    @default("PENDING")
+  reviewedBy     String?   @map("reviewed_by")
+  reviewedAt     DateTime? @map("reviewed_at")
+  resolution     String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  reporter       User      @relation("ReportsGiven", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser   User      @relation("ReportsReceived", fields: [reportedUserId], references: [id], onDelete: Cascade)
+
+  @@index([reporterId])
+  @@index([reportedUserId])
+  @@index([status])
+  @@map("reports")
+}
+
+model Swipe {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  targetUserId String   @map("target_user_id")
+  isLike       Boolean  @map("is_like")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, targetUserId])
+  @@index([userId])
+  @@map("swipes")
+}
+
+model Story {
+  id        String      @id @default(uuid())
+  userId    String      @map("user_id")
+  imageUrl  String      @map("image_url")
+  caption   String?
+  viewCount Int         @default(0) @map("view_count")
+  expiresAt DateTime    @map("expires_at")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  views     StoryView[]
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("stories")
+}
+
+model StoryView {
+  id       String   @id @default(uuid())
+  storyId  String   @map("story_id")
+  viewerId String   @map("viewer_id")
+  viewedAt DateTime @default(now()) @map("viewed_at")
+
+  story    Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, viewerId])
+  @@index([storyId])
+  @@index([viewerId])
+  @@map("story_views")
+}
+
+model Plan {
+  id              String            @id @default(uuid())
+  creatorId       String            @map("creator_id")
+  title           String
+  description     String?
+  category        String            @default("SOCIAL")
+  date            DateTime
+  location        String?
+  maxParticipants Int?              @map("max_participants")
+  isPublic        Boolean           @default(true) @map("is_public")
+  status          String            @default("ACTIVE")
+
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  creator         User              @relation("PlansCreated", fields: [creatorId], references: [id], onDelete: Cascade)
+  participants    PlanParticipant[]
+
+  @@index([creatorId])
+  @@index([date])
+  @@index([status])
+  @@map("plans")
+}
+
+model PlanParticipant {
+  id       String   @id @default(uuid())
+  planId   String   @map("plan_id")
+  userId   String   @map("user_id")
+  status   String   @default("JOINED")
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  plan     Plan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  user     User     @relation("PlanParticipations", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, userId])
+  @@index([planId])
+  @@index([userId])
+  @@map("plan_participants")
+}

@@ -1,0 +1,22 @@
+# PostgreSQL local para desarrollo (evita "Sin conexión con la base de datos")
+# docker compose up -d  desde la raíz del repo (si el puerto 5432 está libre).
+# Si ya tienes Postgres en otro proyecto (p. ej. kora-fix/infrastructure), NO levantes
+# este servicio; usa DATABASE_URL con ese servidor (ver Readme y Back/.env.example).
+# DATABASE_URL típica con este compose: postgresql://kora:kora@localhost:5432/kora_db?schema=public
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kora-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kora
+      POSTGRES_PASSWORD: kora
+      POSTGRES_DB: kora_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - kora_pgdata:/var/lib/postgresql/data
+
+volumes:
+  kora_pgdata:
