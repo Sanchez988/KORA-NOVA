@@ -31,4 +31,4 @@ COPY openapi.yaml ./openapi.yaml
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy || true; npx prisma db push; node dist/server.js"]
