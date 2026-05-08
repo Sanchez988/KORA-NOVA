@@ -1,0 +1,955 @@
+openapi: 3.0.3
+info:
+  title: Kora Nova API
+  description: |
+    API REST de la aplicación Kora (autenticación, perfiles, matches, mensajes, planes, historias, etc.).
+    La mayoría de rutas bajo `/api` requieren **Bearer JWT** (`Authorization: Bearer <access_token>`).
+  version: 1.0.0
+  contact:
+    name: Kora Nova
+
+servers:
+  - url: http://localhost:5000
+    description: Desarrollo local
+  - url: http://127.0.0.1:5000
+    description: Loopback
+
+tags:
+  - name: Sistema
+  - name: Auth
+  - name: Perfil
+  - name: Match
+  - name: Mensajes
+  - name: Reportes
+  - name: Upload
+  - name: Ubicación
+  - name: Historias
+  - name: Planes
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+        error:
+          type: string
+
+paths:
+  /health:
+    get:
+      tags: [Sistema]
+      summary: Estado del servidor
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Registro de usuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, dateOfBirth]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                dateOfBirth:
+                  type: string
+                  format: date
+      responses:
+        '201':
+          description: Usuario creado
+        '400':
+          description: Validación o dominio de correo no permitido
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Inicio de sesión
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Tokens y usuario
+        '401':
+          description: Credenciales inválidas
+
+  /api/auth/verify-email:
+    post:
+      tags: [Auth]
+      summary: Verificar correo con token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: Verificado
+
+  /api/auth/resend-verification:
+    post:
+      tags: [Auth]
+      summary: Reenviar correo de verificación
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+      responses:
+        '200':
+          description: Enviado o ignorado por seguridad
+
+  /api/auth/request-password-reset:
+    post:
+      tags: [Auth]
+      summary: Solicitar recuperación de contraseña
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Restablecer contraseña con token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+
+  /api/auth/google:
+    post:
+      tags: [Auth]
+      summary: Login con Google (idToken u objeto según implementación)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Tokens
+
+  /api/auth/google/oauth-code:
+    post:
+      tags: [Auth]
+      summary: Intercambio OAuth PKCE (code, redirectUri, codeVerifier)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, redirectUri, codeVerifier]
+              properties:
+                code:
+                  type: string
+                redirectUri:
+                  type: string
+                codeVerifier:
+                  type: string
+      responses:
+        '200':
+          description: Tokens
+
+  /api/auth/google/reactivate-deleted:
+    post:
+      tags: [Auth]
+      summary: Reactivar cuenta Google eliminada
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idToken:
+                  type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/auth/google/restart-fresh-deleted:
+    post:
+      tags: [Auth]
+      summary: Nueva cuenta tras borrado con Google
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idToken:
+                  type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/auth/refresh-token:
+    post:
+      tags: [Auth]
+      summary: Renovar access token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Nuevo access token
+
+  /api/auth/legal-consent:
+    post:
+      tags: [Auth]
+      summary: Aceptar términos / versión legal
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Usuario autenticado
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Usuario actual
+        '401':
+          description: No autorizado
+
+  /api/auth/account:
+    delete:
+      tags: [Auth]
+      summary: Eliminar cuenta (baja lógica)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+
+  /api/auth/account/restart-fresh:
+    post:
+      tags: [Auth]
+      summary: Borrado definitivo tras periodo de gracia
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/auth/reactivate:
+    post:
+      tags: [Auth]
+      summary: Reactivar cuenta eliminada (email/password)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/profile:
+    post:
+      tags: [Perfil]
+      summary: Crear perfil
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Perfil creado
+    put:
+      tags: [Perfil]
+      summary: Actualizar perfil
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+
+  /api/profile/me:
+    get:
+      tags: [Perfil]
+      summary: Mi perfil completo
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Perfil
+
+  /api/profile/stats:
+    get:
+      tags: [Perfil]
+      summary: Estadísticas del perfil
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Stats
+
+  /api/profile/photo:
+    delete:
+      tags: [Perfil]
+      summary: Eliminar una foto del perfil
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+
+  /api/profile/incognito:
+    patch:
+      tags: [Perfil]
+      summary: Activar/desactivar modo incógnito
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+
+  /api/profile/{userId}:
+    get:
+      tags: [Perfil]
+      summary: Perfil público por ID de usuario
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Perfil
+        '404':
+          description: No encontrado
+
+  /api/match/discovery:
+    get:
+      tags: [Match]
+      summary: Lista para Descubrir (swipe)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de usuarios
+
+  /api/match/like:
+    post:
+      tags: [Match]
+      summary: Dar like a un usuario
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId]
+              properties:
+                targetUserId:
+                  type: string
+                isSuperLike:
+                  type: boolean
+      responses:
+        '200':
+          description: Like registrado; puede incluir match
+
+  /api/match/dislike:
+    post:
+      tags: [Match]
+      summary: Pasar de un usuario
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId]
+              properties:
+                targetUserId:
+                  type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/match/my-matches:
+    get:
+      tags: [Match]
+      summary: Mis matches y último mensaje
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de matches
+
+  /api/match/{matchId}:
+    delete:
+      tags: [Match]
+      summary: Deshacer match (unmatch)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: matchId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/messages/{id}:
+    get:
+      tags: [Mensajes]
+      summary: Historial de mensajes del match
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID del **match**
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Mensajes
+    post:
+      tags: [Mensajes]
+      summary: Enviar mensaje (JSON o multipart según adjuntos)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID del **match**
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                images:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '201':
+          description: Mensaje creado
+    delete:
+      tags: [Mensajes]
+      summary: Eliminar mensaje (borrado lógico)
+      description: Misma forma de URL que GET/POST, pero aquí `{id}` es el **messageId**.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID del **mensaje** a eliminar
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/messages/{messageId}/read:
+    patch:
+      tags: [Mensajes]
+      summary: Marcar mensaje como leído
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: messageId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/reports/my-targets:
+    get:
+      tags: [Reportes]
+      summary: IDs de usuarios ya reportados por mí
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de IDs
+
+  /api/reports/status/{reportedUserId}:
+    get:
+      tags: [Reportes]
+      summary: Estado de reporte frente a un usuario
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reportedUserId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Estado
+
+  /api/reports/to/{reportedUserId}:
+    delete:
+      tags: [Reportes]
+      summary: Revocar reportes a un usuario
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: reportedUserId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/reports:
+    post:
+      tags: [Reportes]
+      summary: Crear reporte
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Reporte creado
+
+  /api/upload/image:
+    post:
+      tags: [Upload]
+      summary: Subir una imagen
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: URL o metadatos de la subida
+
+  /api/upload/images:
+    post:
+      tags: [Upload]
+      summary: Subir hasta 5 imágenes
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                images:
+                  type: array
+                  maxItems: 5
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '200':
+          description: OK
+
+  /api/location/toggle:
+    post:
+      tags: [Ubicación]
+      summary: Activar o desactivar ubicación
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+
+  /api/location/status:
+    get:
+      tags: [Ubicación]
+      summary: Estado de ubicación
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Estado
+
+  /api/location:
+    post:
+      tags: [Ubicación]
+      summary: Actualizar coordenadas
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                latitude:
+                  type: number
+                longitude:
+                  type: number
+                accuracy:
+                  type: number
+      responses:
+        '200':
+          description: OK
+
+  /api/location/me:
+    get:
+      tags: [Ubicación]
+      summary: Mi última ubicación
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ubicación o vacío
+
+  /api/stories:
+    post:
+      tags: [Historias]
+      summary: Crear historia (imagen)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+                caption:
+                  type: string
+      responses:
+        '201':
+          description: Story creada
+
+  /api/stories/me:
+    get:
+      tags: [Historias]
+      summary: Mis historias activas
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista
+
+  /api/stories/matches:
+    get:
+      tags: [Historias]
+      summary: Historias de mis matches
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista
+
+  /api/stories/{storyId}/view:
+    post:
+      tags: [Historias]
+      summary: Registrar visualización de una historia
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/stories/{storyId}:
+    delete:
+      tags: [Historias]
+      summary: Eliminar mi historia
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: storyId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+
+  /api/plans:
+    get:
+      tags: [Planes]
+      summary: Planes activos públicos
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de planes
+    post:
+      tags: [Planes]
+      summary: Crear plan
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, date]
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                category:
+                  type: string
+                date:
+                  type: string
+                  format: date-time
+                location:
+                  type: string
+                maxParticipants:
+                  type: integer
+                isPublic:
+                  type: boolean
+      responses:
+        '201':
+          description: Plan creado
+
+  /api/plans/mine:
+    get:
+      tags: [Planes]
+      summary: Mis planes (creados o en los que participo)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista
+
+  /api/plans/{id}:
+    patch:
+      tags: [Planes]
+      summary: Editar plan (solo creador)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                description:
+                  type: string
+                category:
+                  type: string
+                date:
+                  type: string
+                location:
+                  type: string
+                maxParticipants:
+                  type: integer
+      responses:
+        '200':
+          description: Plan actualizado
+    delete:
+      tags: [Planes]
+      summary: Cancelar plan (solo creador)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plan cancelado
+
+  /api/plans/{id}/join:
+    post:
+      tags: [Planes]
+      summary: Unirme al plan
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Plan con participantes actualizados
+
+  /api/plans/{id}/add-participant:
+    post:
+      tags: [Planes]
+      summary: Agregar un match al plan (solo creador)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId:
+                  type: string
+                  description: ID del usuario (debe haber match activo con el creador)
+      responses:
+        '200':
+          description: Plan actualizado
+
+  /api/plans/{id}/leave:
+    delete:
+      tags: [Planes]
+      summary: Salir del plan
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
