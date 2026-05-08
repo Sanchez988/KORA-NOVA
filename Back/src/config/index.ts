@@ -23,12 +23,25 @@ if (dbUrl.startsWith('file:')) {
   process.exit(1);
 }
 
+function envBool(raw: string | undefined, fallback: boolean): boolean {
+  if (typeof raw !== 'string') return fallback;
+  const v = raw.trim().toLowerCase();
+  if (!v) return fallback;
+  if (['1', 'true', 'yes', 'on'].includes(v)) return true;
+  if (['0', 'false', 'no', 'off'].includes(v)) return false;
+  return fallback;
+}
+
 export const config = {
   // Configuración del servidor
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '5000', 10),
   apiUrl: process.env.API_URL || 'http://localhost:5000',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
+  emailVerificationRequired: envBool(
+    process.env.EMAIL_VERIFICATION_REQUIRED,
+    (process.env.NODE_ENV || 'development') === 'production'
+  ),
 
   // JWT
   jwt: {
