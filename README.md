@@ -129,6 +129,30 @@ npm start
 
 ---
 
+## Despliegue en internet (sin depender de tu PC)
+
+Este repo quedó preparado para **Render** con `render.yaml` en la raíz y `Back/Dockerfile`.
+
+Pasos:
+
+1. En [Render](https://render.com), crea un **Blueprint** apuntando a este repositorio.
+2. Render creará:
+   - servicio web `kora-backend`
+   - PostgreSQL `kora-db`
+3. En el servicio web, completa variables marcadas como `sync: false` (Google, email, Cloudinary, etc.).
+4. Define `API_URL` con la URL pública final del backend, por ejemplo:
+   - `https://kora-backend.onrender.com`
+5. Espera el primer deploy y valida:
+   - `https://TU_BACKEND/health`
+   - `https://TU_BACKEND/api/docs` (Swagger)
+6. Genera una APK apuntando a producción:
+   - `EXPO_PUBLIC_API_URL=https://TU_BACKEND/api`
+   - luego `eas build -p android --profile preview`
+
+Con esto, los testers pueden usar la app desde cualquier red sin que tú tengas encendido tu backend local.
+
+---
+
 ## Rutas del API (resumen)
 
 | Prefijo | Ámbito |
