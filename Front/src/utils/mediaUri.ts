@@ -13,6 +13,26 @@ function isLoopbackHost(hostname: string): boolean {
 }
 
 /**
+ * Imágenes guardadas como `http://192.168.x.x:5000/uploads/...` o `http://localhost/...`
+ * en la BD dejan de ser alcanzables al cambiar de red o al usar la APK contra Render.
+ * Si la ruta es de ficheros servidos por este API (`/uploads`, `/static`), se sirven desde
+ * el origen actual (`getMediaOrigin()`).
+ */
+export function rehostAppMediaPaths(uri: string): string {
+  const t = (uri || '').trim();
+  if (!/^https?:\/\//i.test(t)) return t;
+  try {
+    const u = new URL(t);
+    const path = u.pathname || '';
+    if (!/^\/(uploads|static)(\/|$)/i.test(path)) return t;
+    const origin = getMediaOrigin().replace(/\/+$/, '');
+    return `${origin}${path}${u.search || ''}`;
+  } catch {
+    return t;
+  }
+}
+
+/**
  * URLs absolutas guardadas en el servidor como `localhost` no cargan en el móvil.
  * Sustituye el host por el mismo que usa `EXPO_PUBLIC_API_URL` / inferencia LAN.
  */
@@ -41,6 +61,11 @@ export function resolveRenderableMediaUri(uri: string): string {
   if (!raw) return raw;
   const low = raw.toLowerCase();
 
+  /** Algunos fallbacks del API guardan `uploads/…` sin `/` inicial → no es URL válida en el móvil. */
+  if (/^(uploads|static)\//i.test(raw)) {
+    return `${getMediaOrigin()}/${raw.replace(/^\/+/, '')}`;
+  }
+
   if (
     low.startsWith('file:') ||
     low.startsWith('content:') ||
@@ -64,10 +89,10 @@ export function resolveRenderableMediaUri(uri: string): string {
     if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.protocol === 'https:') {
       x = `https://${raw.slice(7)}`;
     }
-    return rewriteLoopbackMediaUrls(x);
+    return rewriteLoopbackMediaUrls(rehostAppMediaPaths(x));
   }
   if (low.startsWith('https://')) {
-    return rewriteLoopbackMediaUrls(raw);
+    return rewriteLoopbackMediaUrls(rehostAppMediaPaths(raw));
   }
 
   return raw;
