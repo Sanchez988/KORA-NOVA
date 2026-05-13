@@ -233,7 +233,7 @@ const ProfileScreen = ({ navigation }: any) => {
   return (
     <View style={styles.screen}>
       {/* ─── Header ───────────────────────────────────────────────────── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <View style={styles.headerAvatarBox}>
           <Ionicons name="person-outline" size={22} color="rgba(162,155,254,0.7)" />
         </View>
@@ -680,7 +680,7 @@ const makeStyles = (theme: any) => StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 52,
+    paddingTop: 12,
     paddingHorizontal: 16,
     paddingBottom: 12,
     backgroundColor: theme.bg,
