@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -34,10 +35,12 @@ import { NovaOutlineButton } from "../components/nova/NovaOutlineButton";
 import { KORA_BG } from "../design/koraNova";
 import { apiErrorDisplayMessage } from "../services/api";
 import { authService } from "../services/auth.service";
+import { useScreenInsets } from "../utils/screenInsets";
 
 const { width } = Dimensions.get("window");
 
-const LoginScreen = ({ navigation }: any) => {
+const LoginScreen = ({ navigation, route }: any) => {
+  const { fabTop, scrollBottom, insets, compact } = useScreenInsets();
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const rdm = useMemo(() => makeRdmStyles(theme), [theme]);
@@ -67,6 +70,33 @@ const LoginScreen = ({ navigation }: any) => {
       Animated.timing(slideAnim, { toValue: 0, duration: 750, useNativeDriver: true }),
     ]).start();
   }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      const p = route?.params;
+      if (!p || typeof p !== "object") return;
+      let touched = false;
+      if (typeof p.initialEmail === "string" && p.initialEmail.trim()) {
+        setEmail(p.initialEmail.trim().toLowerCase());
+        touched = true;
+      }
+      if (p.openDeletedRecovery) {
+        setShowEmailForm(true);
+        if (typeof p.recoverableUntil === "string") setRecoverableUntil(p.recoverableUntil);
+        else setRecoverableUntil(null);
+        setPendingGoogleIdToken(null);
+        setDeletedModal(true);
+        touched = true;
+      }
+      if (touched) {
+        navigation.setParams({
+          initialEmail: undefined,
+          openDeletedRecovery: undefined,
+          recoverableUntil: undefined,
+        });
+      }
+    }, [route?.params, navigation])
+  );
 
   const handleGoogleSuccess = async (idToken: string) => {
     setErrorMsg("");
@@ -307,7 +337,7 @@ const LoginScreen = ({ navigation }: any) => {
 
       {typeof navigation.canGoBack === "function" && navigation.canGoBack() ? (
         <TouchableOpacity
-          style={styles.backFab}
+          style={[styles.backFab, { top: fabTop }]}
           onPress={() => navigation.goBack()}
           hitSlop={14}
           activeOpacity={0.85}
@@ -318,10 +348,17 @@ const LoginScreen = ({ navigation }: any) => {
 
       <KeyboardAvoidingView
         style={{ flex: 1, width: "100%" }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[
+            styles.scroll,
+            {
+              paddingTop: (compact ? insets.top + 16 : insets.top + 24) + spacing.md,
+              paddingBottom: scrollBottom + spacing.md,
+            },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -477,7 +514,7 @@ const LoginScreen = ({ navigation }: any) => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* ── Modal: cuenta desactivada (30 días para recuperar o reiniciar) ── */}
+      {/* ── Modal: cuenta eliminada (30 días: recuperar o empezar de cero) ── */}
       <Modal
         visible={deletedModal}
         transparent
@@ -490,14 +527,15 @@ const LoginScreen = ({ navigation }: any) => {
               <Ionicons name="time-outline" size={34} color="#FDCB6E" />
             </View>
 
-            <Text style={rdm.title}>Cuenta desactivada</Text>
+            <Text style={rdm.title}>Cuenta eliminada</Text>
             <Text style={rdm.body}>
               {recoveryDateLabel(recoverableUntil)
                 ? `Tienes hasta el ${recoveryDateLabel(recoverableUntil)} para elegir una opción. `
                 : "Tienes hasta 30 días desde la baja para elegir una opción. "}
               Puedes recuperar tu cuenta con tu perfil, matches y mensajes, o empezar de cero (se borra el
               historial en el servidor) y registrarte otra vez con el mismo correo
-              {pendingGoogleIdToken ? " / con el mismo Google." : "."}
+              {pendingGoogleIdToken ? " / con el mismo Google." : "."}{" "}
+              Pasado ese plazo sin recuperarla, tus datos se eliminan de forma permanente.
             </Text>
 
             <TouchableOpacity
@@ -588,7 +626,6 @@ const makeStyles = (theme: any) => StyleSheet.create({
     flexGrow: 1,
     justifyContent: "center",
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xxl,
   },
   content: {
     alignItems: "center",
@@ -596,7 +633,7 @@ const makeStyles = (theme: any) => StyleSheet.create({
 
   backFab: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 52 : 40,
+    top: 0,
     left: 18,
     zIndex: 20,
     width: 44,
