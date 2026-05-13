@@ -26,6 +26,7 @@ import { useAuth } from "../context/AuthContext";
 import { firstProfilePhoto } from "../utils/profilePhotos";
 import { ensureForegroundLocationAccess, getWebGeolocationCoords } from "../utils/permissions";
 import { apiErrorDisplayMessage } from "../services/api";
+import { useScreenInsets } from "../utils/screenInsets";
 
 const { width, height } = Dimensions.get("window");
 const SWIPE_THRESHOLD = 120;
@@ -49,6 +50,7 @@ function goMatchCelebrate(
 }
 
 const DiscoveryScreen = ({ navigation, route }: any) => {
+  const { headerTop } = useScreenInsets();
   const { theme } = useTheme();
   const { user: me } = useAuth();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -115,7 +117,7 @@ const DiscoveryScreen = ({ navigation, route }: any) => {
       Alert.alert(
         "No se pudo cargar Descubrir",
         msg.includes("perfil") || msg.includes("ubicación") || msg.includes("ubicacion")
-          ? `${msg}\n\nCompleta tu perfil y permite ubicación, luego vuelve a intentar o pulsa Recargar.`
+          ? `${msg}\n\nCompleta tu perfil. La ubicación es opcional para ver tarjetas; actívala en Configuración → Privacidad si quieres distancias aproximadas.`
           : msg || "Revisa tu conexión e inténtalo de nuevo."
       );
       setUsers([]);
@@ -146,7 +148,7 @@ const DiscoveryScreen = ({ navigation, route }: any) => {
       if (list.length === 0) {
         Alert.alert(
           "Descubrir",
-          "No hay más perfiles por ahora. Asegúrate de que otros usuarios tengan perfil y ubicación, o vuelve más tarde."
+          "No hay más perfiles por ahora. Otros usuarios necesitan un perfil visible; vuelve más tarde o amplía tus filtros si los hubiera."
         );
       }
     } catch (e) {
@@ -154,7 +156,7 @@ const DiscoveryScreen = ({ navigation, route }: any) => {
       Alert.alert(
         "No se pudieron actualizar las recomendaciones",
         msg.includes("perfil") || msg.includes("ubicación") || msg.includes("ubicacion")
-          ? `${msg}\n\nActiva compartir ubicación en Ajustes, entra de nuevo a Descubrir o completa el perfil.`
+          ? `${msg}\n\nCompleta el perfil. Para distancias aproximadas, activa compartir ubicación en Configuración → Privacidad y vuelve a Descubrir.`
           : msg || "Revisa conexión, que el backend esté en marcha y EXPO_PUBLIC_API_URL en el móvil."
       );
     } finally {
@@ -276,7 +278,7 @@ const DiscoveryScreen = ({ navigation, route }: any) => {
   if (currentIndex >= users.length) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: headerTop }]}>
           <TouchableOpacity
             style={styles.headerSideBtn}
             onPress={() => navigation.getParent()?.navigate('Profile')}
@@ -285,18 +287,30 @@ const DiscoveryScreen = ({ navigation, route }: any) => {
             <Ionicons name="person-outline" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <KoraNovaLogo width={110} height={40} />
-          <TouchableOpacity
-            style={styles.headerSideBtn}
-            activeOpacity={0.7}
-            onPress={refreshDiscovery}
-            disabled={refreshing}
-          >
-            {refreshing ? (
-              <ActivityIndicator size="small" color="rgba(162,155,254,0.95)" />
-            ) : (
-              <Ionicons name="sparkles-outline" size={23} color="rgba(162,155,254,0.85)" />
-            )}
-          </TouchableOpacity>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <TouchableOpacity
+              style={styles.headerSideBtn}
+              onPress={() =>
+                (navigation.getParent()?.getParent() ?? navigation.getParent())?.navigate("StoriesHub")
+              }
+              activeOpacity={0.85}
+              accessibilityLabel="Historias"
+            >
+              <Ionicons name="aperture" size={22} color="rgba(162,155,254,0.85)" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.headerSideBtn}
+              activeOpacity={0.7}
+              onPress={refreshDiscovery}
+              disabled={refreshing}
+            >
+              {refreshing ? (
+                <ActivityIndicator size="small" color="rgba(162,155,254,0.95)" />
+              ) : (
+                <Ionicons name="sparkles-outline" size={23} color="rgba(162,155,254,0.85)" />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyEmoji}>😊</Text>
@@ -320,7 +334,7 @@ const DiscoveryScreen = ({ navigation, route }: any) => {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: headerTop }]}>
         <TouchableOpacity
           style={styles.headerSideBtn}
           activeOpacity={0.8}
@@ -331,18 +345,30 @@ const DiscoveryScreen = ({ navigation, route }: any) => {
 
         <KoraNovaLogo width={110} height={40} />
 
-        <TouchableOpacity
-          style={styles.headerSideBtn}
-          activeOpacity={0.7}
-          onPress={refreshDiscovery}
-          disabled={refreshing}
-        >
-          {refreshing ? (
-            <ActivityIndicator size="small" color="rgba(162,155,254,0.95)" />
-          ) : (
-            <Ionicons name="sparkles-outline" size={23} color="rgba(162,155,254,0.9)" />
-          )}
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <TouchableOpacity
+            style={styles.headerSideBtn}
+            onPress={() =>
+              (navigation.getParent()?.getParent() ?? navigation.getParent())?.navigate("StoriesHub")
+            }
+            activeOpacity={0.85}
+            accessibilityLabel="Historias"
+          >
+            <Ionicons name="aperture" size={22} color="rgba(162,155,254,0.9)" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerSideBtn}
+            activeOpacity={0.7}
+            onPress={refreshDiscovery}
+            disabled={refreshing}
+          >
+            {refreshing ? (
+              <ActivityIndicator size="small" color="rgba(162,155,254,0.95)" />
+            ) : (
+              <Ionicons name="sparkles-outline" size={23} color="rgba(162,155,254,0.9)" />
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Card stack */}
@@ -416,7 +442,7 @@ const makeStyles = (theme: any) => StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingTop: 52,
+    paddingTop: 12,
     paddingHorizontal: 20,
     paddingBottom: 10,
     backgroundColor: theme.bg,
