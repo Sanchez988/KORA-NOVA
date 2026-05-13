@@ -8,14 +8,18 @@ import {
   Platform,
   Animated,
   TextInput,
+  ScrollView,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { authService } from "../services/auth.service";
-import { colors, spacing, borderRadius, typography } from "../theme/colors";
+import { apiErrorDisplayMessage } from "../services/api";
+import { colors, spacing, borderRadius } from "../theme/colors";
+import { useScreenInsets } from "../utils/screenInsets";
 
 const VerifyEmailScreen = ({ route, navigation }: any) => {
-  const { email } = route.params || {};
+  const { scrollBottom, insets } = useScreenInsets();
+  const { email, verificationCode: initialVerificationCode, codeDelivery } = route.params || {};
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -26,6 +30,11 @@ const VerifyEmailScreen = ({ route, navigation }: any) => {
   React.useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 700, useNativeDriver: true }).start();
   }, []);
+
+  React.useEffect(() => {
+    const v = typeof initialVerificationCode === "string" ? initialVerificationCode.trim() : "";
+    if (v) setCode(v.toUpperCase());
+  }, [initialVerificationCode]);
 
   const handleVerify = async () => {
     setErrorMsg("");
@@ -39,8 +48,8 @@ const VerifyEmailScreen = ({ route, navigation }: any) => {
       await authService.verifyEmail(code.trim().toUpperCase());
       setSuccessMsg("Correo verificado. Ahora puedes iniciar sesion.");
       setTimeout(() => navigation.navigate("Login"), 1500);
-    } catch (error: any) {
-      setErrorMsg(error.response?.data?.message || "Codigo invalido o expirado");
+    } catch (error: unknown) {
+      setErrorMsg(apiErrorDisplayMessage(error) || "Codigo invalido o expirado");
     } finally {
       setLoading(false);
     }
@@ -52,10 +61,21 @@ const VerifyEmailScreen = ({ route, navigation }: any) => {
     setErrorMsg("");
     setSuccessMsg("");
     try {
-      await authService.resendVerificationEmail(email);
-      setSuccessMsg("Codigo reenviado. Revisa tu bandeja de entrada y spam.");
-    } catch (error: any) {
-      setErrorMsg(error.response?.data?.message || "No se pudo reenviar el correo");
+      const data = await authService.resendVerificationEmail(email);
+      if (typeof data?.verificationCode === "string" && data.verificationCode.trim()) {
+        setCode(data.verificationCode.trim().toUpperCase());
+      }
+      if (data?.codeDelivery === "in_app") {
+        setSuccessMsg(
+          "No se pudo enviar el correo. El codigo quedo rellenado arriba; usalo para verificar."
+        );
+      } else if (data?.codeDelivery === "both") {
+        setSuccessMsg("Codigo reenviado por correo y mostrado aqui tambien.");
+      } else {
+        setSuccessMsg("Codigo reenviado. Revisa tu bandeja de entrada y spam.");
+      }
+    } catch (error: unknown) {
+      setErrorMsg(apiErrorDisplayMessage(error) || "No se pudo reenviar el correo");
     } finally {
       setResending(false);
     }
@@ -69,9 +89,22 @@ const VerifyEmailScreen = ({ route, navigation }: any) => {
       end={{ x: 1, y: 1 }}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.keyboardView}
+        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingHorizontal: spacing.lg,
+              paddingTop: insets.top + spacing.lg,
+              paddingBottom: scrollBottom + spacing.lg,
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         <Animated.View style={[styles.inner, { opacity: fadeAnim }]}>
           {/* Header */}
           <View style={styles.header}>
@@ -80,9 +113,19 @@ const VerifyEmailScreen = ({ route, navigation }: any) => {
             </View>
             <Text style={styles.title}>Verifica tu correo</Text>
             <Text style={styles.subtitle}>
-              {"Enviamos un codigo de 6 digitos a\n"}
+              {codeDelivery === "in_app" || initialVerificationCode
+                ? "El codigo llego por la app (y por correo si tu servidor lo envio). Revisa tambien spam.\n"
+                : "Enviamos un codigo de 6 digitos a\n"}
               <Text style={styles.emailText}>{email || "tu correo"}</Text>
             </Text>
+            {(codeDelivery === "both" || codeDelivery === "in_app" || initialVerificationCode) && (
+              <View style={styles.inAppHint}>
+                <Ionicons name="phone-portrait-outline" size={16} color="rgba(255,255,255,0.95)" />
+                <Text style={styles.inAppHintText}>
+                  Si el correo no llega, el codigo puede completarse desde la respuesta segura de la app.
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Card */}
@@ -93,7 +136,7 @@ const VerifyEmailScreen = ({ route, navigation }: any) => {
               value={code}
               onChangeText={(t) => { setCode(t.toUpperCase()); setErrorMsg(""); }}
               placeholder="ABC123"
-              placeholderTextColor={colors.text.tertiary}
+              placeholderTextColor="rgba(18,18,35,0.35)"
               maxLength={6}
               autoCapitalize="characters"
               autoCorrect={false}
@@ -149,6 +192,7 @@ const VerifyEmailScreen = ({ route, navigation }: any) => {
             </TouchableOpacity>
           </View>
         </Animated.View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
   );
@@ -156,7 +200,11 @@ const VerifyEmailScreen = ({ route, navigation }: any) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  keyboardView: { flex: 1, justifyContent: "center", padding: spacing.lg },
+  keyboardView: { flex: 1 },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+  },
   inner: { alignItems: "center" },
 
   header: { alignItems: "center", marginBottom: spacing.xl },
@@ -183,6 +231,23 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   emailText: { fontWeight: "700", color: "#fff" },
+  inAppHint: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 10,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    borderRadius: borderRadius.md,
+    maxWidth: 340,
+  },
+  inAppHintText: {
+    flex: 1,
+    fontSize: 13,
+    color: "rgba(255,255,255,0.95)",
+    lineHeight: 18,
+  },
 
   card: {
     width: "100%",
@@ -211,7 +276,8 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     letterSpacing: 8,
-    color: colors.text.primary,
+    /** texto oscuro sobre fondo claro (primary es blanco y aquí quedaba invisible) */
+    color: colors.text.inverse,
     textAlign: "center",
     marginBottom: spacing.sm,
   },
@@ -264,7 +330,7 @@ const styles = StyleSheet.create({
   },
   noteText: {
     fontSize: 12,
-    color: colors.text.tertiary,
+    color: "rgba(18,18,35,0.55)",
     flex: 1,
     lineHeight: 17,
   },
