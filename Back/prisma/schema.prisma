@@ -226,6 +226,9 @@ model Plan {
   category        String            @default("SOCIAL")
   date            DateTime
   location        String?
+  // Zona aproximada para mapa (~1 km); no la posicion exacta del creador.
+  approxMapLat    Float?            @map("approx_map_lat")
+  approxMapLng    Float?            @map("approx_map_lng")
   maxParticipants Int?              @map("max_participants")
   isPublic        Boolean           @default(true) @map("is_public")
   status          String            @default("ACTIVE")
