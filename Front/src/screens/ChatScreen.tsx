@@ -42,6 +42,8 @@ import ReportUserModal from '../components/ReportUserModal';
 import { capturePhotoViaInlineWebcam } from '../utils/webCameraCapture';
 import { uploadChatAsset, resolveChatAttachmentUrl, isRemoteImageUrl } from '../services/upload.service';
 import { firstProfilePhoto } from '../utils/profilePhotos';
+import { matchService } from '../services/match.service';
+import { apiErrorDisplayMessage } from '../services/api';
 
 // ─── Audio (expo-av): carga perezosa; en web la grabación usa MediaRecorder ──
 let AudioLib: any = null;
@@ -688,6 +690,39 @@ const ChatScreen = ({ route, navigation }: any) => {
   const [playingVoiceMessageId, setPlayingVoiceMessageId] = useState<string | null>(null);
 
   const canReport = Boolean(otherUserId && matchId && matchId !== 'demo' && !isDemoMode);
+
+  const openConversationMenu = useCallback(() => {
+    if (!canReport || !matchId) return;
+    const goReport = () => setReportOpen(true);
+    const goUnmatch = () => {
+      const runUnmatch = async () => {
+        try {
+          await matchService.unmatch(matchId);
+          navigation.navigate('MainTabs', { screen: 'Mensajes' });
+        } catch (e: unknown) {
+          alertUser('Error', apiErrorDisplayMessage(e));
+        }
+      };
+      Alert.alert(
+        'Deshacer match',
+        'Se eliminará el chat y el match. No volverás a ver a esta persona en Descubrir en las mismas condiciones que antes.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Deshacer match', style: 'destructive', onPress: () => void runUnmatch() },
+        ]
+      );
+    };
+    Alert.alert(
+      'Más opciones',
+      'Los reportes son confidenciales. El equipo revisará los reportes.',
+      [
+        { text: 'Reportar usuario', onPress: goReport },
+        { text: 'Deshacer match', style: 'destructive', onPress: goUnmatch },
+        { text: 'Cancelar', style: 'cancel' },
+      ],
+      { cancelable: true }
+    );
+  }, [canReport, matchId, navigation]);
 
   const otherLastActivity = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -1411,10 +1446,10 @@ const ChatScreen = ({ route, navigation }: any) => {
             <TouchableOpacity
               style={st.s.hBtn}
               activeOpacity={0.8}
-              onPress={() => setReportOpen(true)}
-              accessibilityLabel="Reportar usuario"
+              onPress={openConversationMenu}
+              accessibilityLabel="Menú: reportar o deshacer match"
             >
-              <Ionicons name="flag-outline" size={17} color={icon.headerAction} />
+              <Ionicons name="ellipsis-vertical" size={20} color={icon.headerAction} />
             </TouchableOpacity>
           ) : null}
           {isDemoMode ? (
