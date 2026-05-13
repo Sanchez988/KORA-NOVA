@@ -11,6 +11,7 @@ import { Match } from '../types';
 import { colors, spacing } from '../theme/colors';
 import { useTheme } from '../context/ThemeContext';
 import { displayPhotosForImage } from '../utils/profilePhotos';
+import { useScreenInsets } from '../utils/screenInsets';
 
 const AVATAR_BG = ['#6C5CE7', '#FF6B8B', '#00CEC9', '#FDCB6E', '#E17055', '#A29BFE', '#636e72'];
 
@@ -103,6 +104,7 @@ const cv = StyleSheet.create({
 });
 
 const MensajesScreen = ({ navigation }: any) => {
+  const { headerTop, scrollBottom } = useScreenInsets();
   const { user } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -130,11 +132,19 @@ const MensajesScreen = ({ navigation }: any) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View>
+      <View style={[styles.header, { paddingTop: headerTop }]}>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Mensajes</Text>
           <Text style={styles.headerSub}>Tus conversaciones</Text>
         </View>
+        <TouchableOpacity
+          style={styles.storiesBtn}
+          onPress={() => navigation.navigate('StoriesHub')}
+          activeOpacity={0.85}
+          accessibilityLabel="Historias"
+        >
+          <Ionicons name="aperture" size={22} color="#A29BFE" />
+        </TouchableOpacity>
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{totalUnread > 0 ? totalUnread : matches.length}</Text>
         </View>
@@ -179,7 +189,7 @@ const MensajesScreen = ({ navigation }: any) => {
               tintColor={colors.primary}
             />
           }
-          contentContainerStyle={{ paddingBottom: 32 }}
+          contentContainerStyle={{ paddingBottom: scrollBottom + 16 }}
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -189,7 +199,17 @@ const MensajesScreen = ({ navigation }: any) => {
 
 const makeStyles = (theme: any) => StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 52, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: theme.bg },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingTop: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: theme.bg },
+  storiesBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: theme.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
   headerTitle: { fontSize: 28, fontWeight: '900', color: theme.text },
   headerSub: { fontSize: 13, color: theme.textAccent, marginTop: 2 },
   badge: { backgroundColor: '#6C5CE7', borderRadius: 20, minWidth: 36, height: 36, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
