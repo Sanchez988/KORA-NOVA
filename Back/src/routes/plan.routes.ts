@@ -8,6 +8,7 @@ router.use(authenticate);
 
 router.get('/', planController.getPlans);
 router.get('/mine', planController.getMyPlans);
+router.get('/map', planController.getPlansMap);
 router.post('/', planController.createPlan);
 router.patch('/:id', planController.updatePlan);
 router.post('/:id/join', planController.joinPlan);
