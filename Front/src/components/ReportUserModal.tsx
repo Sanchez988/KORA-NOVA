@@ -47,6 +47,7 @@ export default function ReportUserModal({
   const [step, setStep] = useState<Step>('reasons');
   const [selectedReason, setSelectedReason] = useState<ReportReasonValue | null>(null);
   const [otherDetail, setOtherDetail] = useState('');
+  const [optionalDescription, setOptionalDescription] = useState('');
   const [hasReported, setHasReported] = useState(false);
   const [statusLoading, setStatusLoading] = useState(false);
 
@@ -55,6 +56,7 @@ export default function ReportUserModal({
       setStep('reasons');
       setSelectedReason(null);
       setOtherDetail('');
+      setOptionalDescription('');
       setHasReported(false);
       setStatusLoading(false);
     }
@@ -128,32 +130,12 @@ export default function ReportUserModal({
 
   const finishSuccess = (msg: string) => {
     onClose();
-    const doUndo = () => {
-      void (async () => {
-        try {
-          const { message: undoMsg } = await revokeReportToUser(reportedUserId);
-          const m = undoMsg?.trim() || 'Reporte retirado.';
-          if (Platform.OS === 'web' && typeof window !== 'undefined') {
-            window.alert(m);
-            onReportRevoked?.();
-            return;
-          }
-          Alert.alert('', m, [{ text: 'OK', onPress: () => onReportRevoked?.() }]);
-        } catch (e) {
-          Alert.alert('No se pudo deshacer', reportErrorMessage(e));
-        }
-      })();
-    };
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
       window.alert(msg);
-      if (window.confirm('¿Deshacer este reporte ahora?')) doUndo();
-      else onSuccess?.();
+      onSuccess?.();
       return;
     }
-    Alert.alert('', msg, [
-      { text: 'Deshacer', style: 'destructive', onPress: doUndo },
-      { text: 'OK', onPress: () => onSuccess?.() },
-    ]);
+    Alert.alert('', msg, [{ text: 'OK', onPress: () => onSuccess?.() }]);
   };
 
   const sendReport = async () => {
@@ -170,7 +152,10 @@ export default function ReportUserModal({
       const { message } = await createReport({
         reportedUserId,
         reason: selectedReason,
-        description: selectedReason === 'OTHER' ? otherDetail.trim() : undefined,
+        description:
+          selectedReason === 'OTHER'
+            ? otherDetail.trim()
+            : optionalDescription.trim() || undefined,
       });
       const msg = message?.trim() || REPORT_CONFIRM_MESSAGE;
       finishSuccess(msg);
@@ -184,6 +169,7 @@ export default function ReportUserModal({
   const pickReason = (r: ReportReasonValue) => {
     setSelectedReason(r);
     if (r !== 'OTHER') setOtherDetail('');
+    setOptionalDescription('');
     setStep('confirm');
   };
 
@@ -191,6 +177,7 @@ export default function ReportUserModal({
     setStep('reasons');
     setSelectedReason(null);
     setOtherDetail('');
+    setOptionalDescription('');
   };
 
   const sheetBody = () => {
@@ -227,7 +214,7 @@ export default function ReportUserModal({
     if (step === 'reasons') {
       return (
         <>
-          <Text style={styles.sub}>Elige un motivo</Text>
+          <Text style={styles.sub}>Elige la razón del reporte</Text>
           {REPORT_REASON_OPTIONS.map((opt) => (
             <TouchableOpacity
               key={opt.value}
@@ -272,10 +259,24 @@ export default function ReportUserModal({
             <Text style={styles.hint}>{otherDetail.trim().length}/2000 · mín. 4 caracteres</Text>
           </>
         ) : (
-          <Text style={[styles.sub, { marginTop: 8 }]}>
-            Al enviar, esta persona dejará de mostrarse para ti hasta que retires el reporte en
-            Ajustes.
-          </Text>
+          <>
+            <Text style={[styles.sub, { marginTop: 8 }]}>
+              Puedes añadir una descripción opcional. Al enviar, esta persona dejará de mostrarse para ti hasta que
+              retires el reporte en Ajustes.
+            </Text>
+            <Text style={[styles.sub, { marginTop: 12, marginBottom: 6 }]}>Descripción (opcional)</Text>
+            <TextInput
+              style={styles.textArea}
+              value={optionalDescription}
+              onChangeText={setOptionalDescription}
+              placeholder="Detalles que ayuden al equipo de moderación…"
+              placeholderTextColor="rgba(255,255,255,0.35)"
+              multiline
+              editable={!submitting}
+              maxLength={2000}
+            />
+            <Text style={styles.hint}>{optionalDescription.trim().length}/2000</Text>
+          </>
         )}
         <TouchableOpacity
           style={[styles.primaryBtn, submitting && styles.primaryBtnDisabled]}
@@ -283,7 +284,7 @@ export default function ReportUserModal({
           disabled={submitting}
           activeOpacity={0.85}
         >
-          <Text style={styles.primaryBtnText}>Enviar reporte</Text>
+          <Text style={styles.primaryBtnText}>Enviar</Text>
         </TouchableOpacity>
         {submitting ? <ActivityIndicator style={styles.spinner} color="#6C5CE7" /> : null}
       </>
@@ -300,7 +301,12 @@ export default function ReportUserModal({
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <View style={styles.sheetHeader}>
-                <Text style={styles.title}>Reportar usuario</Text>
+                <View style={{ flex: 1, paddingRight: 8 }}>
+                  <Text style={styles.title}>Reportar usuario</Text>
+                  <Text style={styles.confidentialHint}>
+                    Los reportes son confidenciales. El equipo de Kora Nova los revisará.
+                  </Text>
+                </View>
                 <TouchableOpacity onPress={() => !submitting && onClose()} hitSlop={12} accessibilityRole="button">
                   <Ionicons name="close" size={24} color="rgba(255,255,255,0.5)" />
                 </TouchableOpacity>
@@ -342,6 +348,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
+  },
+  confidentialHint: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.45)',
+    marginTop: 4,
+    lineHeight: 16,
   },
   sub: {
     fontSize: 13,
