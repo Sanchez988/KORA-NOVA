@@ -218,7 +218,8 @@ const nativeStyles = StyleSheet.create({
   },
   triggerFilled: {
     borderColor: colors.primary,
-    backgroundColor: '#FFF0F5',
+    // Mantener fondo oscuro para que el valor no "desaparezca" en tema dark.
+    backgroundColor: colors.backgroundDark,
   },
   valueText: { color: colors.text.primary, fontSize: 16 },
   placeholder: { color: colors.text.tertiary, fontSize: 16 },
