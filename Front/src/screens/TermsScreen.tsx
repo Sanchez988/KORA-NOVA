@@ -15,6 +15,7 @@ import { colors, spacing, borderRadius } from '../theme/colors';
 import { useAuth } from '../context/AuthContext';
 import { LEGAL_DOC_VERSION, PRIVACY_CONTENT, TERMS_CONTENT } from '../constants/legal';
 import { authService } from '../services/auth.service';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // readOnly=true → viene desde Settings, solo lectura, diseño oscuro, sin botones aceptar/rechazar
 
@@ -24,6 +25,7 @@ type Tab = typeof TABS[number];
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export default function TermsScreen({ navigation, route }: any) {
+  const insets = useSafeAreaInsets();
   const { logout, refreshUser } = useAuth();
   const readOnly: boolean = route?.params?.readOnly ?? false;
   const initialTab: Tab = route?.params?.tab ?? 'Términos y Condiciones';
@@ -76,7 +78,7 @@ export default function TermsScreen({ navigation, route }: any) {
     return (
       <View style={ro.screen}>
         {/* Header oscuro */}
-        <View style={ro.header}>
+        <View style={[ro.header, { paddingTop: insets.top + 10 }]}>
           <TouchableOpacity style={ro.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
             <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
           </TouchableOpacity>
@@ -113,7 +115,7 @@ export default function TermsScreen({ navigation, route }: any) {
           key={activeTab}
           style={ro.scroll}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={ro.scrollContent}
+          contentContainerStyle={[ro.scrollContent, { paddingBottom: 40 + insets.bottom }]}
         >
           <Text style={ro.body}>
             {activeTab === 'Términos y Condiciones' ? TERMS_CONTENT : PRIVACY_CONTENT}
@@ -127,7 +129,7 @@ export default function TermsScreen({ navigation, route }: any) {
   return (
     <LinearGradient
       colors={colors.gradient.sunset as any}
-      style={styles.screen}
+      style={[styles.screen, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 8 }]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
     >
@@ -330,7 +332,6 @@ export default function TermsScreen({ navigation, route }: any) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    paddingTop: 48,
   },
   header: {
     alignItems: 'center',
@@ -532,7 +533,7 @@ const ro = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 52,
+    paddingTop: 12,
     paddingHorizontal: 16,
     paddingBottom: 12,
     backgroundColor: '#0D0D1A',
