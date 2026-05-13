@@ -1,3 +1,14 @@
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Raíz monorepo (además de Front/.gitignore y Back/.gitignore)
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+*.log
+*.apk
+*.aab
+*.ipa
