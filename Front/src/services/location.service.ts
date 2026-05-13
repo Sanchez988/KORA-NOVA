@@ -1,9 +1,20 @@
 import api from './api';
 import { Location } from '../types';
 
+export type UpdateLocationResponse = {
+  latitude: number;
+  longitude: number;
+  accuracy?: number | null;
+  approxLat?: number;
+  approxLng?: number;
+  id?: string;
+  userId?: string;
+  updatedAt?: string;
+};
+
 export const locationService = {
   // Actualizar ubicación
-  updateLocation: async (location: Location): Promise<{ message: string }> => {
+  updateLocation: async (location: Location): Promise<UpdateLocationResponse> => {
     const response = await api.post('/location', location);
     return response.data;
   },
