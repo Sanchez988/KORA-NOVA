@@ -441,7 +441,7 @@ function makeMainStyles(theme: Theme) {
     header: {
       flexDirection: "row",
       alignItems: "center",
-      paddingTop: 52,
+      paddingTop: 12,
       paddingHorizontal: 16,
       paddingBottom: 12,
       backgroundColor: theme.bg,
@@ -557,6 +557,8 @@ function makeMainStyles(theme: Theme) {
     },
     photoTipRow: { marginBottom: 8 },
     photoTip: { fontSize: 12, color: theme.textSub },
+    clearAllPhotosBtn: { alignSelf: "flex-start", paddingVertical: 6, marginBottom: 2 },
+    clearAllPhotosText: { fontSize: 13, color: colors.primary, fontWeight: "600", textDecorationLine: "underline" },
 
     inputField: {
       flexDirection: "row",
@@ -751,6 +753,26 @@ const CreateProfileScreen = ({ navigation }: any) => {
     setPhotos((p) => p.filter((_, i) => i !== idx));
   };
 
+  const handleClearAllPhotos = () => {
+    const count = photos.filter((u) => (u || "").trim()).length;
+    if (count === 0) return;
+    Alert.alert(
+      "Quitar todas las fotos",
+      "Se vacían las fotos en esta pantalla. Pulsa «Guardar cambios» al final para guardarlas en el servidor; luego puedes añadir nuevas fotos y guardar de nuevo.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Quitar todas",
+          style: "destructive",
+          onPress: () => {
+            setPhotos([]);
+            setPreviewOpen(false);
+          },
+        },
+      ]
+    );
+  };
+
   const toggleInterest = (label: string) => {
     setInterests((prev) =>
       prev.includes(label) ? prev.filter((i) => i !== label) : [...prev, label]
@@ -826,7 +848,7 @@ const CreateProfileScreen = ({ navigation }: any) => {
   return (
     <View style={styles.screen}>
       {/* ─── Header ───────────────────────────────────────────────────── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
           <Ionicons name="chevron-back" size={20} color={theme.text} />
         </TouchableOpacity>
@@ -851,7 +873,7 @@ const CreateProfileScreen = ({ navigation }: any) => {
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 100 }]}
       >
         {/* ─── Fotos ────────────────────────────────────────────────────── */}
         <View style={styles.sectionRow}>
@@ -904,6 +926,11 @@ const CreateProfileScreen = ({ navigation }: any) => {
         <View style={styles.photoTipRow}>
           <Text style={styles.photoTip}>✨ Agrega entre 3 y 6 fotos para tener más matches</Text>
         </View>
+        {photos.some((u) => (u || "").trim()) ? (
+          <TouchableOpacity style={styles.clearAllPhotosBtn} onPress={handleClearAllPhotos} activeOpacity={0.75}>
+            <Text style={styles.clearAllPhotosText}>Quitar todas las fotos</Text>
+          </TouchableOpacity>
+        ) : null}
 
         {/* ─── Información básica ───────────────────────────────────────── */}
         <Text style={styles.sectionTitle}>Información básica</Text>
@@ -1019,7 +1046,6 @@ const CreateProfileScreen = ({ navigation }: any) => {
           </View>
         </View>
 
-        <View style={{ height: 100 }} />
       </ScrollView>
 
       {/* ─── Fixed bottom actions ─────────────────────────────────────── */}
