@@ -2,8 +2,34 @@ import { Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
+import { snapApproximatePublicCoordinate } from '../lib/geoPrivacy';
 
 const prisma = new PrismaClient();
+
+/** Punto de mapa público (~1 km) a partir del usuario en memoria; null si no comparte ubicación. */
+function approxCoordsFromUserRow(
+  u:
+    | {
+        locationEnabled: boolean;
+        location: { latitude: number; longitude: number } | null;
+      }
+    | null
+    | undefined
+): { lat: number; lng: number } | null {
+  if (!u?.locationEnabled || !u.location) return null;
+  return snapApproximatePublicCoordinate(u.location.latitude, u.location.longitude);
+}
+
+/** Punto de mapa público (~1 km); null si el creador no comparte ubicación. */
+async function approxMapForCreator(creatorId: string): Promise<{ approxMapLat: number | null; approxMapLng: number | null }> {
+  const u = await prisma.user.findUnique({
+    where: { id: creatorId },
+    select: { locationEnabled: true, location: { select: { latitude: true, longitude: true } } },
+  });
+  const c = approxCoordsFromUserRow(u);
+  if (!c) return { approxMapLat: null, approxMapLng: null };
+  return { approxMapLat: c.lat, approxMapLng: c.lng };
+}
 
 const planWithDetails = {
   include: {
@@ -42,6 +68,120 @@ function formatPlan(plan: any) {
     participantCount: plan.participants.length,
   };
 }
+
+// GET /api/plans/map — solo zonas aproximadas + tu punto aproximado si compartes ubicación
+export const getPlansMap = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.userId!;
+    const me = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { locationEnabled: true, location: { select: { latitude: true, longitude: true } } },
+    });
+
+    let meApprox: { approxLat: number; approxLng: number } | null = null;
+    if (me?.locationEnabled && me.location) {
+      const s = snapApproximatePublicCoordinate(me.location.latitude, me.location.longitude);
+      meApprox = { approxLat: s.lat, approxLng: s.lng };
+    }
+
+    const plans = await prisma.plan.findMany({
+      where: { status: 'ACTIVE', isPublic: true },
+      orderBy: { date: 'asc' },
+      select: {
+        id: true,
+        title: true,
+        date: true,
+        location: true,
+        category: true,
+        creatorId: true,
+        approxMapLat: true,
+        approxMapLng: true,
+      },
+    });
+
+    const creatorIds = [...new Set(plans.map((p) => p.creatorId))];
+    const creators = creatorIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: creatorIds } },
+          select: {
+            id: true,
+            locationEnabled: true,
+            location: { select: { latitude: true, longitude: true } },
+          },
+        })
+      : [];
+    const creatorById = new Map(creators.map((c) => [c.id, c]));
+
+    const backfill: { id: string; lat: number; lng: number }[] = [];
+    const pins: {
+      id: string;
+      title: string;
+      date: Date;
+      locationLabel: string | null;
+      category: string;
+      approxLat: number;
+      approxLng: number;
+    }[] = [];
+
+    for (const p of plans) {
+      const hadStored =
+        p.approxMapLat != null &&
+        p.approxMapLng != null &&
+        Number.isFinite(p.approxMapLat) &&
+        Number.isFinite(p.approxMapLng);
+
+      let lat = hadStored ? p.approxMapLat! : null;
+      let lng = hadStored ? p.approxMapLng! : null;
+
+      if (!hadStored) {
+        const snap = approxCoordsFromUserRow(creatorById.get(p.creatorId));
+        if (snap) {
+          lat = snap.lat;
+          lng = snap.lng;
+          backfill.push({ id: p.id, lat: snap.lat, lng: snap.lng });
+        }
+      }
+
+      if (lat != null && lng != null) {
+        pins.push({
+          id: p.id,
+          title: p.title,
+          date: p.date,
+          locationLabel: p.location,
+          category: p.category,
+          approxLat: lat,
+          approxLng: lng,
+        });
+      }
+    }
+
+    if (backfill.length) {
+      await prisma.$transaction(
+        backfill.map((b) =>
+          prisma.plan.update({
+            where: { id: b.id },
+            data: { approxMapLat: b.lat, approxMapLng: b.lng },
+          })
+        )
+      );
+    }
+
+    res.json({
+      plans: pins.map((p) => ({
+        id: p.id,
+        title: p.title,
+        date: p.date,
+        locationLabel: p.locationLabel,
+        category: p.category,
+        approxLat: p.approxLat,
+        approxLng: p.approxLng,
+      })),
+      me: meApprox,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 // GET /api/plans — todos los planes activos
 export const getPlans = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -86,6 +226,8 @@ export const createPlan = async (req: AuthRequest, res: Response, next: NextFunc
     if (!title?.trim()) throw new AppError('El título es obligatorio', 400);
     if (!date) throw new AppError('La fecha es obligatoria', 400);
 
+    const approx = await approxMapForCreator(userId);
+
     const plan = await prisma.plan.create({
       data: {
         creatorId: userId,
@@ -94,6 +236,8 @@ export const createPlan = async (req: AuthRequest, res: Response, next: NextFunc
         category: category || 'SOCIAL',
         date: new Date(date),
         location: location?.trim() || null,
+        approxMapLat: approx.approxMapLat,
+        approxMapLng: approx.approxMapLng,
         maxParticipants: maxParticipants ? parseInt(maxParticipants) : null,
         isPublic: isPublic !== false,
       },
@@ -214,6 +358,8 @@ export const updatePlan = async (req: AuthRequest, res: Response, next: NextFunc
     if (!plan) throw new AppError('Plan no encontrado', 404);
     if (plan.creatorId !== userId) throw new AppError('No tienes permiso para editar este plan', 403);
 
+    const approx = await approxMapForCreator(userId);
+
     const updated = await prisma.plan.update({
       where: { id },
       data: {
@@ -222,6 +368,8 @@ export const updatePlan = async (req: AuthRequest, res: Response, next: NextFunc
         ...(category ? { category } : {}),
         ...(date ? { date: new Date(date) } : {}),
         location: location?.trim() || null,
+        approxMapLat: approx.approxMapLat,
+        approxMapLng: approx.approxMapLng,
         maxParticipants: maxParticipants ? parseInt(maxParticipants) : null,
       },
       ...planWithDetails,
