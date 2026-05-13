@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, StyleSheet } from 'react-native';
+import { Alert, Platform, StyleSheet } from 'react-native';
 import {
   NavigationContainer,
   DefaultTheme,
@@ -37,6 +37,10 @@ import ProfileScreen from '../screens/ProfileScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PlanesScreen from '../screens/PlanesScreen';
 import MatchCelebrationScreen from '../screens/MatchCelebrationScreen';
+import StoriesHubScreen from '../screens/StoriesHubScreen';
+import CreateStoryScreen from '../screens/CreateStoryScreen';
+import StoryViewerScreen from '../screens/StoryViewerScreen';
+import PlansMapScreen from '../screens/PlansMapScreen';
 
 const Stack = createNativeStackNavigator();
 const DiscoveryStack = createNativeStackNavigator();
@@ -214,7 +218,30 @@ function RootStackNavigator({
           <Stack.Screen name="MainTabs" component={MainTabs} />
           <Stack.Screen name="CreateProfile" component={CreateProfileScreen} />
           <Stack.Screen name="Chat" component={ChatScreen} />
+          <Stack.Screen name="StoriesHub" component={StoriesHubScreen} />
+          <Stack.Screen name="CreateStory" component={CreateStoryScreen} />
+          <Stack.Screen
+            name="StoryViewer"
+            component={StoryViewerScreen}
+            options={{
+              animation: 'fade',
+              presentation: 'fullScreenModal',
+              contentStyle:
+                Platform.OS === 'web'
+                  ? ({
+                      flex: 1,
+                      backgroundColor: '#000',
+                      minHeight: '100vh',
+                      height: '100%',
+                      maxHeight: '100vh',
+                      overflow: 'hidden',
+                      width: '100%',
+                    } as unknown as import('react-native').ViewStyle)
+                  : { flex: 1, backgroundColor: '#000' },
+            }}
+          />
           <Stack.Screen name="Settings" component={SettingsScreen} />
+          <Stack.Screen name="PlansMap" component={PlansMapScreen} />
         </>
       )}
     </Stack.Navigator>
