@@ -195,13 +195,39 @@ export type WebGeolocationCoords = {
   accuracy?: number;
 };
 
+export type WebGeolocationOptions = {
+  suppressDenyFollowUp?: boolean;
+  /** `true` pide GPS del dispositivo (más preciso; puede tardar más). */
+  enableHighAccuracy?: boolean;
+  /** `0` evita posiciones cacheadas viejas del navegador. */
+  maximumAge?: number;
+  timeout?: number;
+};
+
+function normalizeWebGeoArg(
+  suppressOrOptions?: boolean | WebGeolocationOptions
+): WebGeolocationOptions {
+  if (typeof suppressOrOptions === 'boolean') {
+    return { suppressDenyFollowUp: suppressOrOptions };
+  }
+  return suppressOrOptions && typeof suppressOrOptions === 'object' ? suppressOrOptions : {};
+}
+
 /**
  * Web/PWA: coordenadas vía `navigator.geolocation` (requiere HTTPS o localhost).
  * En el primer uso el navegador muestra su propio diálogo de permiso.
+ *
+ * @param suppressOrOptions — `true`/`false` (compat.) o `{ suppressDenyFollowUp, enableHighAccuracy, ... }`.
  */
 export async function getWebGeolocationCoords(
-  suppressDenyFollowUp?: boolean
+  suppressOrOptions?: boolean | WebGeolocationOptions
 ): Promise<WebGeolocationCoords | null> {
+  const opts = normalizeWebGeoArg(suppressOrOptions);
+  const suppressDenyFollowUp = Boolean(opts.suppressDenyFollowUp);
+  const enableHighAccuracy = opts.enableHighAccuracy ?? false;
+  const maximumAge = opts.maximumAge ?? 120000;
+  const timeout = opts.timeout ?? 20000;
+
   if (typeof navigator === 'undefined' || !navigator.geolocation) {
     if (!suppressDenyFollowUp) {
       Alert.alert(
@@ -230,7 +256,7 @@ export async function getWebGeolocationCoords(
         }
         resolve(null);
       },
-      { enableHighAccuracy: false, timeout: 20000, maximumAge: 120000 }
+      { enableHighAccuracy, timeout, maximumAge }
     );
   });
 }
@@ -241,7 +267,7 @@ export async function ensureForegroundLocationAccess(
 ): Promise<boolean> {
   if (Platform.OS === 'web') {
     const suppress = Boolean(options?.suppressDenyFollowUp);
-    const coords = await getWebGeolocationCoords(suppress);
+    const coords = await getWebGeolocationCoords({ suppressDenyFollowUp: suppress });
     return coords !== null;
   }
 
