@@ -44,7 +44,8 @@ export const ProfileCard: React.FC<ProfileCardProps> = ({ user, style }) => {
 
   const mainPhoto = photos[photoIdx] || null;
   const age = calcAge(user.dateOfBirth);
-  const distanceKm = user.distance ? Math.round(user.distance / 1000) : null;
+  const distanceKm =
+    user.distance != null && Number.isFinite(user.distance) ? Math.round(user.distance) : null;
 
   const goNext = () => { if (photoIdx < photos.length - 1) setPhotoIdx(photoIdx + 1); };
   const goPrev = () => { if (photoIdx > 0) setPhotoIdx(photoIdx - 1); };
