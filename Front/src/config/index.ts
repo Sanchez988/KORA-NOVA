@@ -1,6 +1,12 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
+/**
+ * Si el build (EAS) no inyecta `EXPO_PUBLIC_API_URL`, el APK no debe usar `localhost`.
+ * Cambia esta constante si despliegas el backend en otro dominio.
+ */
+const DEFAULT_RELEASE_API_ORIGIN = 'https://kora-nova.onrender.com';
+
 /** Puerto del backend en este repo (override con EXPO_PUBLIC_API_PORT). */
 function defaultApiPort(): number {
   const raw =
@@ -94,11 +100,27 @@ function inferredLanBackendHost(): string | undefined {
 }
 
 /**
+ * En web, solo inferimos la API en el mismo host en localhost o LAN privada.
+ * En dominios públicos (Expo Hosting, Vercel, etc.) el backend no vive en :5000 de ese host:
+ * sin `EXPO_PUBLIC_API_URL` las imágenes `/uploads/...` y las rutas fallan.
+ */
+function webHostnameAllowsSameHostApi(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === 'localhost' || h === '127.0.0.1') return true;
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
+  return false;
+}
+
+/**
  * Base de la API usada por axios.
  *
  * - **Web** (`expo start --web`): si abres `http://192.168.x.x:8081`, la API se resuelve a
  *   `http://192.168.x.x:<puerto>/api` (mismo host que el front, backend en el puerto por defecto 5000).
  *   En `localhost` sigue siendo `http://localhost:<puerto>/api`.
+ * - **Web en dominio público** (p. ej. `*.expo.dev`, preview en la nube) sin `EXPO_PUBLIC_API_URL`: se usa
+ *   `DEFAULT_RELEASE_API_ORIGIN` para no apuntar uploads y `/api` al host del front.
  * - **Expo Go en móvil (misma red LAN)**: por defecto se infiere IP desde Metro (`hostUri` / `debuggerHost`) → mismo host.
  * - **Sin inferencia válida**: cae en `localhost` y fallará en el físico hasta que definas `.env`:
  *   `EXPO_PUBLIC_API_URL=http://IP_DE_TU_PC:5000/api`
@@ -120,13 +142,25 @@ export function resolveApiUrl(): string {
 
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname) {
     const { hostname, protocol } = window.location;
-    const proto = protocol === 'https:' ? 'https' : 'http';
-    return `${proto}://${hostname}:${port}/api`;
+    if (webHostnameAllowsSameHostApi(hostname)) {
+      const proto = protocol === 'https:' ? 'https' : 'http';
+      return `${proto}://${hostname}:${port}/api`;
+    }
+    if (__DEV__) {
+      return `http://localhost:${port}/api`;
+    }
+    return normalizeApiUrl(DEFAULT_RELEASE_API_ORIGIN);
   }
 
   const lanHost = inferredLanBackendHost();
   if (lanHost && Platform.OS !== 'web') {
     return `http://${lanHost}:${port}/api`;
+  }
+
+  /** Expo Go = 'expo'; APK/IPA instalado ≠ expo. Sin .env en el bundle, antes se usaba localhost y fallaba todo. */
+  const runningInExpoGo = Constants.appOwnership === 'expo';
+  if (Platform.OS !== 'web' && !runningInExpoGo && !fromEnv && !lanHost) {
+    return normalizeApiUrl(DEFAULT_RELEASE_API_ORIGIN);
   }
 
   if (
@@ -149,7 +183,8 @@ export function resolveApiUrl(): string {
 export const API_URL = resolveApiUrl();
 
 export const API_CONFIG = {
-  timeout: 15000,
+  /** Render free: cold start + TLS a veces supera 70s; un reintento cubre el segundo intento. */
+  timeout: 120000,
   headers: {
     'Content-Type': 'application/json',
   },
