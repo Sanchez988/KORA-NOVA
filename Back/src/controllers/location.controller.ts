@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
+import { snapApproximatePublicCoordinate } from '../lib/geoPrivacy';
 
 const prisma = new PrismaClient();
 
@@ -53,7 +54,19 @@ export const getLocationStatus = async (req: AuthRequest, res: Response, next: N
 export const updateLocation = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.userId!;
-    const { latitude, longitude, accuracy } = req.body;
+    const { latitude: rawLat, longitude: rawLng, accuracy: rawAcc } = req.body;
+
+    const lat = Number(rawLat);
+    const lng = Number(rawLng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new AppError('Coordenadas inválidas', 400);
+    }
+
+    let acc: number | null = null;
+    if (rawAcc !== undefined && rawAcc !== null && rawAcc !== '') {
+      const n = Number(rawAcc);
+      acc = Number.isFinite(n) ? n : null;
+    }
 
     // Verificar si el usuario tiene la ubicación activada
     const user = await prisma.user.findUnique({
@@ -68,19 +81,24 @@ export const updateLocation = async (req: AuthRequest, res: Response, next: Next
     const location = await prisma.location.upsert({
       where: { userId },
       update: {
-        latitude,
-        longitude,
-        accuracy,
+        latitude: lat,
+        longitude: lng,
+        accuracy: acc,
       },
       create: {
         userId,
-        latitude,
-        longitude,
-        accuracy,
+        latitude: lat,
+        longitude: lng,
+        accuracy: acc,
       },
     });
 
-    res.json(location);
+    const snapped = snapApproximatePublicCoordinate(lat, lng);
+    res.json({
+      ...location,
+      approxLat: snapped.lat,
+      approxLng: snapped.lng,
+    });
   } catch (error) {
     next(error);
   }
