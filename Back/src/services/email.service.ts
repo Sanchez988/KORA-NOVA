@@ -21,12 +21,12 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-export const sendEmail = async ({ to, subject, html }: EmailOptions): Promise<void> => {
+/** true si el mensaje se envió por SMTP; false si no hay credenciales o falló el envío. */
+export const sendEmail = async ({ to, subject, html }: EmailOptions): Promise<boolean> => {
   try {
-    // Si no hay configuración de email, solo logear
     if (!config.email.user || !config.email.password) {
       logger.warn(`Email no configurado. Email que se enviaría a ${to}: ${subject}`);
-      return;
+      return false;
     }
 
     await transporter.sendMail({
@@ -37,9 +37,10 @@ export const sendEmail = async ({ to, subject, html }: EmailOptions): Promise<vo
     });
 
     logger.info(`✅ Email enviado a: ${to}`);
+    return true;
   } catch (error) {
     logger.error(`❌ Error enviando email: ${error}`);
-    // No lanzar error para que el registro continúe aunque falle el email
-    logger.warn(`⚠️ El registro continuará sin enviar email de verificación`);
+    logger.warn(`⚠️ No se pudo enviar el correo (el flujo en servidor continúa sin lanzar error al cliente).`);
+    return false;
   }
 };
