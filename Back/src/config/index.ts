@@ -32,15 +32,43 @@ function envBool(raw: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
+/** URL pública del API (uploads, Swagger, enlaces en correos). Render define `RENDER_EXTERNAL_URL`. */
+function resolvePublicApiUrl(): string {
+  const explicit = (process.env.API_URL || '').trim();
+  if (explicit) return explicit.replace(/\/+$/, '');
+  const render = (process.env.RENDER_EXTERNAL_URL || '').trim();
+  if (render) return render.replace(/\/+$/, '');
+  return 'http://localhost:5000';
+}
+
 export const config = {
   // Configuración del servidor
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '5000', 10),
-  apiUrl: process.env.API_URL || 'http://localhost:5000',
+  apiUrl: resolvePublicApiUrl(),
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
   emailVerificationRequired: envBool(
     process.env.EMAIL_VERIFICATION_REQUIRED,
     (process.env.NODE_ENV || 'development') === 'production'
+  ),
+
+  /**
+   * Si true, registro y reenvío de verificación incluyen el código en el JSON (además del intento por SMTP).
+   * La app puede mostrarlo cuando el correo institucional bloquea o falla la entrega; desactivar en entornos
+   * donde solo se confíe en el buzón (HTTPS sigue siendo obligatorio).
+   */
+  emailVerificationIncludeCodeInResponse: envBool(
+    process.env.EMAIL_VERIFICATION_INCLUDE_CODE_IN_RESPONSE,
+    true
+  ),
+
+  /**
+   * Si true, la API incluye `devResetCode` al solicitar recuperación de contraseña aunque NODE_ENV=production.
+   * Solo para entornos de prueba sin SMTP; nunca en producción real ante usuarios.
+   */
+  passwordResetExposeCodeInResponse: envBool(
+    process.env.PASSWORD_RESET_DEV_CODE_IN_RESPONSE,
+    false
   ),
 
   // JWT
