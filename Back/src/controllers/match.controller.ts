@@ -31,20 +31,29 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 }
 
+/** Nunca enviar coordenadas exactas de otros usuarios por JSON. */
+function sanitizeDiscoveryUser(user: { location?: unknown; [k: string]: unknown }, distanceKm: number | null) {
+  const { location: _loc, ...rest } = user;
+  return { ...rest, distance: distanceKm };
+}
+
 // Obtener usuarios para discovery
 export const getDiscoveryUsers = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.userId!;
 
-    // Obtener ubicación del usuario
-    const myLocation = await prisma.location.findUnique({ where: { userId } });
-    const myProfile = await prisma.profile.findUnique({ where: { userId } });
+    const me = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true, location: true },
+    });
 
-    if (!myLocation || !myProfile) {
-      throw new AppError('Completa tu perfil y ubicación', 400);
+    if (!me?.profile) {
+      throw new AppError('Completa tu perfil', 400);
     }
 
-    // Quitar de la cola a quienes ya recibieron like o «no me interesa» (tabla swipes)
+    const canUseMyGps = Boolean(me.locationEnabled && me.location);
+    const iShowDistance = me.profile.showDistance !== false;
+
     const swipes = await prisma.swipe.findMany({
       where: { userId },
       select: { targetUserId: true },
@@ -54,21 +63,16 @@ export const getDiscoveryUsers = async (req: AuthRequest, res: Response, next: N
     const excludeIds = [...new Set([userId, ...seenUserIds, ...reportedIds])].filter(Boolean) as string[];
 
     const candidateFilter: Prisma.UserWhereInput = {
-      // No exigimos `verified` aquí: quien navega ya pasó `authenticate` (cuenta verificada).
-      // Excluir no verificados dejaba Descubrir vacío si otros perfiles aún no tenían el flag en BD.
       isActive: true,
       isBanned: false,
       deletedAt: null,
       profile: { isNot: null },
-      // Sin esto, findMany puede devolver usuarios sin fila en `locations` y luego la lista queda vacía.
       location: { isNot: null },
     };
     if (excludeIds.length > 0) {
       candidateFilter.id = { notIn: excludeIds };
     }
 
-    // Pool amplio: el radio del perfil (p. ej. 10 km del onboarding) suele dejar 0 resultados si las
-    // coordenadas de prueba están lejos; luego hacemos fallback a los más cercanos sin ese tope.
     const users = await prisma.user.findMany({
       where: candidateFilter,
       include: {
@@ -78,28 +82,42 @@ export const getDiscoveryUsers = async (req: AuthRequest, res: Response, next: N
       take: 100,
     });
 
-    const withDistance = users.map((user) => ({
-      ...user,
-      distance: calculateDistance(
-        myLocation.latitude,
-        myLocation.longitude,
-        user.location!.latitude,
-        user.location!.longitude
-      ),
-    }));
+    const ranked = users.map((user) => {
+      let distanceKm: number | null = null;
+      if (
+        canUseMyGps &&
+        iShowDistance &&
+        user.profile?.showDistance !== false &&
+        user.location &&
+        me.location
+      ) {
+        distanceKm = calculateDistance(
+          me.location.latitude,
+          me.location.longitude,
+          user.location.latitude,
+          user.location.longitude
+        );
+      }
+      return sanitizeDiscoveryUser(user as { location?: unknown; [k: string]: unknown }, distanceKm);
+    });
 
-    withDistance.sort((a, b) => a.distance - b.distance);
+    ranked.sort((a: any, b: any) => {
+      const da = a.distance ?? Number.POSITIVE_INFINITY;
+      const db = b.distance ?? Number.POSITIVE_INFINITY;
+      if (da !== db) return da - db;
+      return String(a.profile?.name ?? '').localeCompare(String(b.profile?.name ?? ''), 'es');
+    });
 
-    const maxKm = myProfile.maxDistance;
+    const maxKm = me.profile.maxDistance;
+    const hasAnyDistance = ranked.some((u: any) => u.distance != null);
     const withinRadius =
-      maxKm != null && maxKm > 0
-        ? withDistance.filter((u) => u.distance <= maxKm)
-        : withDistance;
+      hasAnyDistance && maxKm != null && maxKm > 0
+        ? ranked.filter((u: any) => u.distance != null && u.distance <= maxKm)
+        : ranked;
 
-    const usersWithDistance =
-      withinRadius.length > 0 ? withinRadius : withDistance.slice(0, 30);
+    const usersOut = withinRadius.length > 0 ? withinRadius : ranked.slice(0, 30);
 
-    res.json(usersWithDistance);
+    res.json(usersOut);
   } catch (error) {
     next(error);
   }
