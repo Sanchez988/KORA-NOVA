@@ -1,3 +1,10 @@
+# Render Blueprint — Kora Nova backend + Postgres
+#
+# API_URL: opcional. Si no la defines, el backend usa RENDER_EXTERNAL_URL (la URL https://… de este servicio).
+# FRONTEND_URL: origen del front (Expo web, dominio, etc.) para enlaces de verificación / Firebase; créala
+#   en Render → Environment si la necesitas (si falta, el servidor usa http://localhost:5173).
+# Variables sync:false: complétalas en Render → Environment (Google, SMTP, Cloudinary, etc.).
+
 services:
   - type: web
     name: kora-backend
@@ -13,8 +20,7 @@ services:
         value: 0.0.0.0
       - key: PORT
         value: 5000
-      - key: FRONTEND_URL
-        value: "*"
+      # FRONTEND_URL: definir en el dashboard (origen Expo/web) para enlaces de verificación; si falta, el back usa localhost.
       - key: DATABASE_URL
         fromDatabase:
           name: kora-db
@@ -23,8 +29,21 @@ services:
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
-      - key: API_URL
-        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 24h
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 30d
+      # Sin SMTP configurado, deja "false" o los usuarios no podrán completar registro por correo.
+      - key: EMAIL_VERIFICATION_REQUIRED
+        value: "false"
+      # Si pones EMAIL_VERIFICATION_REQUIRED=true, conviene true: la app recibe el código en la respuesta HTTPS
+      # cuando el correo institucional falle (además del intento SMTP).
+      - key: EMAIL_VERIFICATION_INCLUDE_CODE_IN_RESPONSE
+        value: "true"
+      - key: PASSWORD_RESET_DEV_CODE_IN_RESPONSE
+        value: "false"
+      - key: BCRYPT_SALT_ROUNDS
+        value: "12"
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
@@ -38,6 +57,8 @@ services:
       - key: EMAIL_PASSWORD
         sync: false
       - key: EMAIL_FROM
+        sync: false
+      - key: CLOUDINARY_URL
         sync: false
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
