@@ -10,6 +10,7 @@ const REPORT_REASON_VALUES = new Set([
   'HARASSMENT',
   'IMPERSONATION',
   'UNDERAGE',
+  'SPAM',
   'OTHER',
 ]);
 
