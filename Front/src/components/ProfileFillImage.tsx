@@ -22,6 +22,7 @@ export function ProfileFillImage({ uri, style }: Props) {
       style={[StyleSheet.absoluteFillObject, style]}
       contentFit="cover"
       cachePolicy="memory-disk"
+      recyclingKey={src}
       transition={160}
     />
   );
