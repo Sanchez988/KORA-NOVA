@@ -12,6 +12,7 @@ import { Match } from '../types';
 import { colors, spacing } from '../theme/colors';
 import { useTheme } from '../context/ThemeContext';
 import { displayPhotosForImage } from '../utils/profilePhotos';
+import { useScreenInsets } from '../utils/screenInsets';
 
 const AVATAR_BG = ['#6C5CE7', '#FF6B8B', '#00CEC9', '#FDCB6E', '#E17055', '#A29BFE', '#636e72'];
 
@@ -150,6 +151,7 @@ const cv = StyleSheet.create({
 });
 
 const MatchesScreen = ({ navigation }: any) => {
+  const { headerTop } = useScreenInsets();
   const { user } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -170,7 +172,7 @@ const MatchesScreen = ({ navigation }: any) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: headerTop }]}>
         <View>
           <Text style={styles.headerTitle}>Matches</Text>
           <Text style={styles.headerSub}>{matches.length} matches nuevos</Text>
@@ -247,7 +249,7 @@ const MatchesScreen = ({ navigation }: any) => {
 
 const makeStyles = (theme: any) => StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 52, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: theme.bg },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: theme.bg },
   headerTitle: { fontSize: 28, fontWeight: '900', color: theme.text },
   headerSub: { fontSize: 13, color: theme.textAccent, marginTop: 2 },
   badge: { backgroundColor: '#6C5CE7', borderRadius: 20, minWidth: 36, height: 36, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
