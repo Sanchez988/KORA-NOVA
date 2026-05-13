@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../context/AuthContext";
 import { loadExpoNotifications, shouldLoadExpoNotifications } from "../utils/expoNotifications";
@@ -20,7 +21,11 @@ import { locationService } from "../services/location.service";
 import { profileService } from "../services/profile.service";
 import { authService } from "../services/auth.service";
 import { colors } from "../theme/colors";
-import { ensureForegroundLocationAccess } from "../utils/permissions";
+import {
+  ensureForegroundLocationAccess,
+  getWebGeolocationCoords,
+  type WebGeolocationCoords,
+} from "../utils/permissions";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   getMyReportTargets,
@@ -28,6 +33,7 @@ import {
   reportErrorMessage,
   type ReportTargetRow,
 } from "../services/report.service";
+import { useScreenInsets } from "../utils/screenInsets";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -209,6 +215,7 @@ const FiltersModal = ({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 const SettingsScreen = ({ navigation }: any) => {
+  const { insets } = useScreenInsets();
   const { user, logout } = useAuth();
   const { isDark, toggleTheme, theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -217,6 +224,8 @@ const SettingsScreen = ({ navigation }: any) => {
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [loadingLocation, setLoadingLocation] = useState(true);
   const [updatingLocation, setUpdatingLocation] = useState(false);
+  /** Web: evita spam a la API al reenviar posición en cada foco de la pantalla. */
+  const lastWebLocationPushMs = useRef(0);
 
   // Incognito
   const [incognito, setIncognito] = useState(false);
@@ -309,17 +318,77 @@ const SettingsScreen = ({ navigation }: any) => {
     })();
   }, []);
 
+  /** Web: si ya compartes ubicación pero aún no hay fila en el servidor, reenvía GPS (p. ej. tras activar solo el toggle). */
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "web" || !locationEnabled || loadingLocation) return;
+      const now = Date.now();
+      if (now - lastWebLocationPushMs.current < 90_000) return;
+      (async () => {
+        const coords = await getWebGeolocationCoords(true);
+        if (!coords) return;
+        try {
+          await locationService.updateLocation({
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            accuracy: coords.accuracy,
+          });
+          lastWebLocationPushMs.current = Date.now();
+        } catch {
+          /* sin permiso o red: Descubrir también intentará */
+        }
+      })();
+    }, [locationEnabled, loadingLocation])
+  );
+
+  const pushCoordsAfterEnabling = async (coords: WebGeolocationCoords) => {
+    await locationService.updateLocation({
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      accuracy: coords.accuracy,
+    });
+    lastWebLocationPushMs.current = Date.now();
+  };
+
   const handleLocationToggle = async (value: boolean) => {
+    let webCoords: WebGeolocationCoords | null = null;
     if (value) {
-      const ok = await ensureForegroundLocationAccess({
-        suppressDenyFollowUp: false,
-      });
-      if (!ok) return;
+      if (Platform.OS === "web") {
+        webCoords = await getWebGeolocationCoords(false);
+        if (!webCoords) return;
+      } else {
+        const ok = await ensureForegroundLocationAccess({
+          suppressDenyFollowUp: false,
+        });
+        if (!ok) return;
+      }
     }
     setUpdatingLocation(true);
     try {
       const res = await locationService.toggleLocation(value);
       setLocationEnabled(res.locationEnabled);
+      if (value && res.locationEnabled) {
+        try {
+          if (Platform.OS === "web" && webCoords) {
+            await pushCoordsAfterEnabling(webCoords);
+          } else if (Platform.OS !== "web") {
+            const pos = await Location.getCurrentPositionAsync({});
+            await locationService.updateLocation({
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy ?? undefined,
+            });
+          }
+        } catch {
+          const msg =
+            "La preferencia se guardó, pero no pudimos enviar tu posición al servidor. Entra en Descubrir o vuelve a activar el interruptor.";
+          if (Platform.OS === "web" && typeof window !== "undefined") {
+            window.alert(msg);
+          } else {
+            Alert.alert("Ubicación", msg);
+          }
+        }
+      }
     } catch {
       Alert.alert("Error", "No se pudo cambiar la configuración de ubicación");
       setLocationEnabled(!value);
@@ -470,14 +539,14 @@ const SettingsScreen = ({ navigation }: any) => {
       if (Platform.OS === "web") {
         window.alert(
           label
-            ? `Cuenta desactivada.\n\nHasta el ${label} puedes recuperarla o empezar de cero con el mismo correo al iniciar sesión.`
+            ? `Cuenta eliminada (periodo de gracia).\n\nHasta el ${label} puedes recuperarla o empezar de cero con el mismo correo al iniciar sesión. Pasado ese plazo, la eliminación es permanente.`
             : res.message
         );
       } else {
         Alert.alert(
-          "Cuenta desactivada",
+          "Cuenta eliminada",
           label
-            ? `Hasta el ${label} puedes recuperar tu cuenta con todos tus datos o empezar de cero con el mismo correo al iniciar sesión.`
+            ? `Hasta el ${label} puedes recuperar tu cuenta con todos tus datos o empezar de cero con el mismo correo al iniciar sesión. Pasado ese plazo, la eliminación es permanente.`
             : res.message
         );
       }
@@ -491,16 +560,16 @@ const SettingsScreen = ({ navigation }: any) => {
   const handleDeleteAccount = () => {
     if (Platform.OS === "web") {
       const ok = window.confirm(
-        "Desactivar cuenta\n\nTu cuenta quedará oculta. Durante 30 días podrás recuperarla o empezar de cero con el mismo correo al iniciar sesión. ¿Continuar?"
+        "Eliminar cuenta\n\nTu perfil dejará de mostrarse. Durante 30 días podrás recuperarla al iniciar sesión o empezar de cero con el mismo correo. Pasado ese plazo, tus datos se eliminan de forma permanente.\n\n¿Continuar?"
       );
       if (ok) doDeleteAccount();
     } else {
       Alert.alert(
-        "Desactivar cuenta",
-        "Tu cuenta quedará desactivada durante 30 días: en ese plazo podrás recuperarla con tu perfil y mensajes, o empezar de cero (borrar todo y registrarte otra vez).\n\n¿Seguro que deseas continuar?",
+        "Eliminar cuenta",
+        "Tu cuenta quedará en periodo de gracia de 30 días: en ese plazo puedes recuperarla con tu perfil y mensajes al iniciar sesión, o empezar de cero (borrar todo y registrarte otra vez con el mismo correo). Pasados los 30 días, los datos se eliminan de forma permanente.\n\n¿Seguro que deseas continuar?",
         [
           { text: "Cancelar", style: "cancel" },
-          { text: "Desactivar", style: "destructive", onPress: doDeleteAccount },
+          { text: "Eliminar cuenta", style: "destructive", onPress: doDeleteAccount },
         ]
       );
     }
@@ -559,7 +628,7 @@ const SettingsScreen = ({ navigation }: any) => {
   return (
     <View style={styles.screen}>
       {/* ─── Header ───────────────────────────────────────────────── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.8}>
           <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
         </TouchableOpacity>
@@ -623,13 +692,19 @@ const SettingsScreen = ({ navigation }: any) => {
           />
         </View>
 
-        {/* ─── Ubicación ────────────────────────────────────── */}
-        <SectionTitle title="Ubicación" />
+        {/* ─── Privacidad (incluye ubicación: manual) ───────────────────── */}
+        <SectionTitle title="Privacidad" />
         <View style={styles.card}>
           <SettingsRow
             icon={locationEnabled ? "location" : "location-outline"}
             label="Compartir ubicación"
-            desc={locationEnabled ? "Personas cercanas pueden verte" : "Activa para ver personas cerca"}
+            desc={
+              locationEnabled
+                ? Platform.OS === "web"
+                  ? "Distancia en Descubrir y mapa de planes (~1 km). En web el navegador debe permitir ubicación; al activar aquí enviamos tu posición aproximada al servidor."
+                  : "Distancia aproximada en Descubrir y posición en mapa de planes (~1 km). Nunca se envía tu punto exacto a otros."
+                : "Sin ubicación no verás distancias ni aparecerás en el mapa de planes. Puedes seguir usando el resto de la app."
+            }
             right={
               loadingLocation || updatingLocation ? (
                 <ActivityIndicator size="small" color={colors.primary} />
@@ -643,11 +718,7 @@ const SettingsScreen = ({ navigation }: any) => {
               )
             }
           />
-        </View>
-
-        {/* ─── Privacidad ───────────────────────────────────── */}
-        <SectionTitle title="Privacidad" />
-        <View style={styles.card}>
+          <Divider />
           <SettingsRow
             icon={incognito ? "glasses" : "glasses-outline"}
             label="Modo Incógnito"
@@ -819,8 +890,8 @@ const SettingsScreen = ({ navigation }: any) => {
         <View style={styles.card}>
           <SettingsRow
             icon="trash-outline"
-            label="Desactivar cuenta"
-            desc="30 días para recuperar o empezar de cero con el mismo correo"
+            label="Eliminar cuenta"
+            desc="30 días para recuperarla; después se borran tus datos de forma permanente"
             onPress={deletingAccount ? undefined : handleDeleteAccount}
             danger
             right={
@@ -920,7 +991,7 @@ const makeStyles = (theme: ReturnType<typeof import('../context/ThemeContext').u
   header: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 52,
+    paddingTop: 12,
     paddingHorizontal: 16,
     paddingBottom: 12,
     backgroundColor: theme.bg,
