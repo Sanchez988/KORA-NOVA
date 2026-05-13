@@ -19,6 +19,7 @@ import { useAuth } from '../context/AuthContext';
 import { firstProfilePhoto, displayPhotosForImage, coerceProfileStringList } from '../utils/profilePhotos';
 import type { Match } from '../types';
 import { INTEREST_ICONS } from '../data/interestIcons';
+import { useScreenInsets } from '../utils/screenInsets';
 
 const { width } = Dimensions.get('window');
 const PHOTO_HEIGHT = width * 0.9;
@@ -36,6 +37,7 @@ const calcAge = (dob: string) => {
 };
 
 const ProfileDetailScreen = ({ route, navigation }: any) => {
+  const { headerTop } = useScreenInsets();
   const { user }: { user: DiscoveryUser } = route.params;
   const { user: me } = useAuth();
   const [photoIdx, setPhotoIdx] = useState(0);
@@ -50,7 +52,8 @@ const ProfileDetailScreen = ({ route, navigation }: any) => {
   const hobbies = coerceProfileStringList(profile?.hobbies as unknown);
 
   const age = calcAge(user.dateOfBirth);
-  const distanceKm = user.distance ? Math.round(user.distance / 1000) : null;
+  const distanceKm =
+    user.distance != null && Number.isFinite(user.distance) ? Math.round(user.distance) : null;
 
   const handleAction = async (direction: 'left' | 'right' | 'up') => {
     if (actioned) return;
@@ -95,7 +98,7 @@ const ProfileDetailScreen = ({ route, navigation }: any) => {
   return (
     <View style={styles.container}>
       {/* ─── Header ─────────────────────────────────────────────────────── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: headerTop }]}>
         <TouchableOpacity
           style={styles.headerBtn}
           onPress={() => navigation.goBack()}
@@ -110,9 +113,20 @@ const ProfileDetailScreen = ({ route, navigation }: any) => {
           <TouchableOpacity
             style={styles.headerBtn}
             activeOpacity={0.8}
-            onPress={() => setReportOpen(true)}
+            onPress={() =>
+              Alert.alert(
+                'Opciones',
+                'Los reportes son confidenciales.',
+                [
+                  { text: 'Reportar usuario', onPress: () => setReportOpen(true) },
+                  { text: 'Cancelar', style: 'cancel' },
+                ],
+                { cancelable: true }
+              )
+            }
+            accessibilityLabel="Menú de opciones"
           >
-            <Ionicons name="flag-outline" size={20} color="rgba(162,155,254,0.85)" />
+            <Ionicons name="ellipsis-vertical" size={22} color="rgba(162,155,254,0.85)" />
           </TouchableOpacity>
         ) : (
           <View style={styles.headerBtn} />
@@ -350,7 +364,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 52,
+    paddingTop: 12,
     paddingHorizontal: 16,
     paddingBottom: 8,
     backgroundColor: '#0D0D1A',
