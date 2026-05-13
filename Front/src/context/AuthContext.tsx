@@ -1,4 +1,5 @@
-import React, { createContext, useState, useEffect, useContext, ReactNode } from 'react';
+import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authService } from '../services/auth.service';
 import { User, LoginData, RegisterData, LoginResponse } from '../types';
@@ -10,7 +11,11 @@ interface AuthContextType {
   onboardingCompleted: boolean;
   setOnboardingCompleted: (v: boolean) => void;
   login: (data: LoginData) => Promise<void>;
-  register: (data: RegisterData) => Promise<{ devMode?: boolean }>;
+  register: (data: RegisterData) => Promise<{
+    devMode?: boolean;
+    verificationCode?: string;
+    codeDelivery?: 'email' | 'in_app' | 'both';
+  }>;
   googleLogin: (idToken: string) => Promise<void>;
   /** Persiste token/usuario (p. ej. respuesta de `/auth/reactivate`) sin segundo login. */
   hydrateSession: (payload: LoginResponse) => Promise<void>;
@@ -26,10 +31,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
 
-  useEffect(() => {
-    loadStoredAuth();
-  }, []);
-
   const loadStoredAuth = async () => {
     try {
       const [storedToken, storedUser] = await AsyncStorage.multiGet(['token', 'user']);
@@ -44,6 +45,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } catch {
           // Token expirado o inválido — limpiar sesión y mostrar Login
           await AsyncStorage.multiRemove(['token', 'refreshToken', 'user']);
+          setToken(null);
+          setUser(null);
         }
       }
     } catch (error) {
@@ -105,7 +108,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setOnboardingCompleted(false);
   };
 
-  const refreshUser = async () => {
+  const refreshUser = useCallback(async () => {
     try {
       const updatedUser = await authService.getMe();
       setUser(updatedUser);
@@ -113,7 +116,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error) {
       console.error('Error refreshing user:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadStoredAuth();
+  }, []);
+
+  /** Al volver a primer plano, sincroniza usuario/perfil con el servidor (URLs de fotos e historias). */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
+      if (next !== 'active') return;
+      if (!token) return;
+      void refreshUser();
+    });
+    return () => sub.remove();
+  }, [token, refreshUser]);
 
   return (
     <AuthContext.Provider value={{ user, token, loading, onboardingCompleted, setOnboardingCompleted, login, register, googleLogin, hydrateSession, logout, refreshUser }}>
