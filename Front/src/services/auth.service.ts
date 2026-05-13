@@ -3,7 +3,17 @@ import { LoginData, RegisterData, LoginResponse, User } from '../types';
 
 export const authService = {
   // Registro
-  register: async (data: RegisterData): Promise<{ message: string; devMode?: boolean }> => {
+  register: async (
+    data: RegisterData
+  ): Promise<{
+    message: string;
+    devMode?: boolean;
+    userId?: string;
+    emailDelivered?: boolean;
+    verificationCode?: string;
+    codeDelivery?: 'email' | 'in_app' | 'both';
+    firebaseEnabled?: boolean;
+  }> => {
     const response = await api.post('/auth/register', data);
     return response.data;
   },
@@ -47,7 +57,13 @@ export const authService = {
   },
 
   // Reenviar email de verificación
-  resendVerificationEmail: async (email: string): Promise<{ message: string }> => {
+  resendVerificationEmail: async (
+    email: string
+  ): Promise<{
+    message: string;
+    verificationCode?: string;
+    codeDelivery?: 'email' | 'in_app' | 'both';
+  }> => {
     const response = await api.post('/auth/resend-verification', { email });
     return response.data;
   },
@@ -55,7 +71,7 @@ export const authService = {
   // Solicitar reset de contraseña (backend: POST /auth/request-password-reset)
   requestPasswordReset: async (
     email: string
-  ): Promise<{ message: string; devResetCode?: string }> => {
+  ): Promise<{ message: string; devResetCode?: string; codeDelivery?: 'email' | 'in_app' }> => {
     const response = await api.post('/auth/request-password-reset', { email });
     return response.data;
   },
