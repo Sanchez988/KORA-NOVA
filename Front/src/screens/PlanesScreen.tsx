@@ -26,6 +26,7 @@ import { matchService } from '../services/match.service';
 import { useAuth } from '../context/AuthContext';
 import { Match } from '../types';
 import { displayPhotosForImage } from '../utils/profilePhotos';
+import { useScreenInsets } from '../utils/screenInsets';
 
 type TabType = 'activos' | 'misplanes' | 'finalizados';
 
@@ -73,6 +74,16 @@ function formatTimeLeft(targetIso: string, nowMs: number): string {
   if (hours > 0) return `Faltan ${hours}h ${mins}m`;
   if (mins > 0) return `Faltan ${mins}m ${secs}s`;
   return `Faltan ${secs}s`;
+}
+
+function alertPlanMapLocationHint() {
+  const msg =
+    'Tu plan está publicado. Para que salga en el mapa de planes, activa «Compartir ubicación» en Configuración → Privacidad y asegúrate de que la app tenga tu posición (pantalla Descubrir o permiso de ubicación en el navegador si usas web). Luego abre de nuevo el mapa.';
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.alert(`Mapa de planes\n\n${msg}`);
+  } else {
+    Alert.alert('Mapa de planes', msg);
+  }
 }
 
 function formatEndedAgo(targetIso: string, nowMs: number): string {
@@ -284,6 +295,7 @@ const CreatePlanModal = ({
   visible: boolean; onClose: () => void; onCreated: () => void; editPlan?: Plan | null;
 }) => {
   const isEdit = !!editPlan;
+  const { insets } = useScreenInsets();
   const { theme } = useTheme();
   const iosPickerTheme = theme.isDark ? 'dark' : 'light';
 
@@ -341,7 +353,7 @@ const CreatePlanModal = ({
           maxParticipants: maxP ? parseInt(maxP) : undefined,
         });
       } else {
-        await planService.createPlan({
+        const created = await planService.createPlan({
           title: title.trim(),
           description: desc.trim() || undefined,
           category,
@@ -349,6 +361,12 @@ const CreatePlanModal = ({
           location: location.trim() || undefined,
           maxParticipants: maxP ? parseInt(maxP) : undefined,
         });
+        const hasMapPin =
+          created.approxMapLat != null &&
+          created.approxMapLng != null &&
+          Number.isFinite(Number(created.approxMapLat)) &&
+          Number.isFinite(Number(created.approxMapLng));
+        if (!hasMapPin) alertPlanMapLocationHint();
       }
       onCreated(); reset(); onClose();
     } catch (e: any) {
@@ -359,13 +377,18 @@ const CreatePlanModal = ({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={[mo.container, { backgroundColor: theme.bg }]}>
-        <View style={[mo.header, { borderBottomColor: theme.border }]}>
+        <View style={[mo.header, { borderBottomColor: theme.border, paddingTop: Math.max(insets.top, 12) + 8 }]}>
           <Text style={[mo.title, { color: theme.text }]}>{isEdit ? 'Editar plan' : 'Nuevo plan'}</Text>
           <TouchableOpacity onPress={onClose} activeOpacity={0.7}>
             <Ionicons name="close" size={24} color={theme.textSub} />
           </TouchableOpacity>
         </View>
-        <ScrollView style={mo.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={mo.body}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 36 }}
+        >
           <Text style={[mo.label, { color: theme.textAccent }]}>Título *</Text>
           <TextInput style={[mo.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]} placeholder="Ej: Partido de fútbol en la cancha norte" value={title} onChangeText={setTitle} placeholderTextColor={theme.textMuted} />
           <Text style={[mo.label, { color: theme.textAccent }]}>Categoría</Text>
@@ -575,7 +598,7 @@ const webInputStyle: React.CSSProperties = {
 
 const mo = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 20, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1 },
   title: { fontSize: 20, fontWeight: '800' },
   body: { flex: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.lg },
   label: { fontSize: 13, fontWeight: '700', marginBottom: 6, marginTop: spacing.sm },
@@ -646,6 +669,7 @@ const InviteToPlanModal = ({
   onClose: () => void;
   onAdded: () => void;
 }) => {
+  const { insets } = useScreenInsets();
   const { theme } = useTheme();
   const { user } = useAuth();
   const myId = user?.id ?? '';
@@ -702,7 +726,7 @@ const InviteToPlanModal = ({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
       <View style={[imo.container, { backgroundColor: theme.bg }]}>
-        <View style={[imo.header, { borderBottomColor: theme.border }]}>
+        <View style={[imo.header, { borderBottomColor: theme.border, paddingTop: Math.max(insets.top, 12) + 8 }]}>
           <View style={{ flex: 1 }}>
             <Text style={[imo.title, { color: theme.text }]}>Agregar al plan</Text>
             <Text style={[imo.sub, { color: theme.textMuted }]} numberOfLines={2}>
@@ -756,7 +780,7 @@ const InviteToPlanModal = ({
             data={candidates}
             keyExtractor={(m) => m.id}
             style={{ flex: 1 }}
-            contentContainerStyle={imo.listContent}
+            contentContainerStyle={[imo.listContent, { paddingBottom: insets.bottom + 28 }]}
             keyboardShouldPersistTaps="handled"
             renderItem={({ item: m }) => {
               const o = otherFromMatch(m, myId);
@@ -804,7 +828,7 @@ const imo = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingTop: 20,
+    paddingTop: 12,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
@@ -844,7 +868,12 @@ const imo = StyleSheet.create({
   emptySub: { fontSize: 13, textAlign: 'center', maxWidth: 280 },
 });
 
-const PlanesScreen = ({ navigation }: { navigation: { navigate: (name: string, params?: object) => void } }) => {
+const PlanesScreen = ({
+  navigation,
+}: {
+  navigation: { navigate: (name: 'PlansMap' | 'Discovery' | string, params?: object) => void };
+}) => {
+  const { headerTop } = useScreenInsets();
   const { user } = useAuth();
   const { theme } = useTheme();
   const styles = useMemo(() => makeStyles(theme), [theme]);
@@ -937,7 +966,7 @@ const PlanesScreen = ({ navigation }: { navigation: { navigate: (name: string, p
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: headerTop }]}>
         <View style={styles.headerLeft}>
           <TouchableOpacity
             style={styles.discoverArrowBtn}
@@ -951,10 +980,22 @@ const PlanesScreen = ({ navigation }: { navigation: { navigate: (name: string, p
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Planes</Text>
         </View>
-        <TouchableOpacity style={styles.newBtn} onPress={() => setShowCreate(true)} activeOpacity={0.85}>
-          <Ionicons name="add" size={16} color={theme.text} />
-          <Text style={styles.newBtnText}>Nuevo</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          <TouchableOpacity
+            style={styles.mapHeaderBtn}
+            onPress={() => navigation.navigate('PlansMap')}
+            activeOpacity={0.85}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+            accessibilityRole="button"
+            accessibilityLabel="Mapa de planes"
+          >
+            <Ionicons name="map-outline" size={22} color={theme.text} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.newBtn} onPress={() => setShowCreate(true)} activeOpacity={0.85}>
+            <Ionicons name="add" size={16} color={theme.text} />
+            <Text style={styles.newBtnText}>Nuevo</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.tabContainer}>
@@ -1047,7 +1088,7 @@ const PlanesScreen = ({ navigation }: { navigation: { navigate: (name: string, p
 
 const makeStyles = (theme: any) => StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.bg },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 52, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: theme.bg },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, paddingHorizontal: spacing.lg, paddingBottom: spacing.md, backgroundColor: theme.bg },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
   discoverArrowBtn: {
     width: 40,
@@ -1060,6 +1101,17 @@ const makeStyles = (theme: any) => StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: { fontSize: 28, fontWeight: '900', color: theme.text, flexShrink: 1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  mapHeaderBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: theme.border,
+    backgroundColor: theme.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   newBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 1.5, borderColor: theme.border, backgroundColor: theme.surface2 },
   newBtnText: { color: theme.text, fontWeight: '700', fontSize: 13 },
   tabContainer: { paddingHorizontal: spacing.lg, paddingVertical: 10, backgroundColor: theme.bg },
