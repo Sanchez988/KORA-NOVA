@@ -5,6 +5,8 @@ export function isStaleLocalProfilePhotoUri(uri: string): boolean {
   const low = (uri || '').trim().toLowerCase();
   if (!low) return true;
   if (low.startsWith('blob:') || low.startsWith('file:')) return true;
+  /** `content:` caduca al cerrar la app; no debe quedar guardado como “foto de servidor”. */
+  if (low.startsWith('content:')) return true;
   if (low.startsWith('ph://')) return true;
   return false;
 }
