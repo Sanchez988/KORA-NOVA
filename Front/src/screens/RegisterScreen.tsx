@@ -11,6 +11,7 @@ import {
   Animated,
   Dimensions,
   Modal,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -24,9 +25,12 @@ import { GOOGLE_CLIENT_ID } from "../config";
 import { isExpoGoEmailOnlyLogin } from "../config/expoGoLogin";
 import { sanitizeWebUrlAfterGoogleOAuth } from "../config/googleOAuth";
 import { apiErrorDisplayMessage } from "../services/api";
+import { authService } from "../services/auth.service";
 import { REGISTER_TERMS_SECTIONS } from "../constants/legal";
 import { KORA_BG } from "../design/koraNova";
+import { useScreenInsets } from "../utils/screenInsets";
 import { NovaGradientButton } from "../components/nova/NovaGradientButton";
+import { NovaOutlineButton } from "../components/nova/NovaOutlineButton";
 import type { Theme } from "../context/ThemeContext";
 import { DatePickerInput } from "../components/DatePickerInput";
 
@@ -163,6 +167,7 @@ function makeLegalModalStyles(theme: Theme) {
 
 // ─── Main Screen ─────────────────────────────────────────────────────────────
 const RegisterScreen = ({ navigation, route }: any) => {
+  const { fabTop, scrollBottom, insets } = useScreenInsets();
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(theme, isDark), [theme, isDark]);
   const expoGoEmailOnly = useMemo(() => isExpoGoEmailOnlyLogin(), []);
@@ -176,6 +181,12 @@ const RegisterScreen = ({ navigation, route }: any) => {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+
+  const [accountRecoveryModalVisible, setAccountRecoveryModalVisible] = useState(false);
+  const [accountRecoveryUntilIso, setAccountRecoveryUntilIso] = useState<string | null>(null);
+  const [accountRecoveryStep, setAccountRecoveryStep] = useState<"menu" | "purge_password">("menu");
+  const [purgeOldPassword, setPurgeOldPassword] = useState("");
+  const [purgeLoading, setPurgeLoading] = useState(false);
 
   const { register, googleLogin } = useAuth();
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -236,21 +247,33 @@ const RegisterScreen = ({ navigation, route }: any) => {
     return age >= 18;
   };
 
-  const handleRegister = async () => {
-    setErrorMsg("");
-    if (!dateOfBirth) { setErrorMsg("Ingresa tu fecha de nacimiento"); return; }
-    if (!isAdult(dateOfBirth)) { setErrorMsg("Debes ser mayor de 18 anos"); return; }
-    if (!password) { setErrorMsg("Ingresa una contrasena"); return; }
-    if (password.length < 8) { setErrorMsg("La contrasena debe tener al menos 8 caracteres"); return; }
-    if (password !== confirmPassword) { setErrorMsg("Las contrasenas no coinciden"); return; }
+  const recoveryDateLabel = (iso: string | null) => {
+    if (!iso) return "";
+    try {
+      return new Date(iso).toLocaleDateString("es-CO", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+    } catch {
+      return "";
+    }
+  };
 
+  const doRegister = async () => {
     setLoading(true);
+    setErrorMsg("");
     try {
       const result = await register({ email, password, dateOfBirth });
       if (result?.devMode) {
         navigation.navigate("Login");
       } else {
-        navigation.navigate("VerifyEmail", { email });
+        navigation.navigate("VerifyEmail", {
+          email: email.trim().toLowerCase(),
+          verificationCode:
+            typeof result?.verificationCode === "string" ? result.verificationCode : undefined,
+          codeDelivery: result?.codeDelivery,
+        });
       }
     } catch (error: unknown) {
       const err = error as {
@@ -261,30 +284,50 @@ const RegisterScreen = ({ navigation, route }: any) => {
         err.response?.data?.code === "ACCOUNT_IN_RECOVERY"
       ) {
         const until = err.response?.data?.recoverableUntil;
-        const label = until
-          ? (() => {
-              try {
-                return new Date(until).toLocaleDateString("es-CO", {
-                  day: "numeric",
-                  month: "long",
-                  year: "numeric",
-                });
-              } catch {
-                return "";
-              }
-            })()
-          : "";
-        setErrorMsg(
-          label
-            ? `Este correo tiene una cuenta eliminada que puedes recuperar hasta el ${label}. Inicia sesión y elige recuperar o empezar de cero.`
-            : (err.response?.data?.message ?? apiErrorDisplayMessage(error))
-        );
-      } else {
-        setErrorMsg(apiErrorDisplayMessage(error));
+        setAccountRecoveryUntilIso(typeof until === "string" ? until : null);
+        setAccountRecoveryStep("menu");
+        setPurgeOldPassword("");
+        setAccountRecoveryModalVisible(true);
+        return;
       }
+      setErrorMsg(apiErrorDisplayMessage(error));
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePurgeDeletedAndRegister = async () => {
+    if (!purgeOldPassword.trim()) {
+      Alert.alert("Contraseña", "Ingresa la contraseña de tu cuenta anterior (la que usabas antes de eliminarla).");
+      return;
+    }
+    setPurgeLoading(true);
+    try {
+      await authService.restartFreshDeletedAccount({
+        email: email.trim().toLowerCase(),
+        password: purgeOldPassword,
+      });
+      setAccountRecoveryModalVisible(false);
+      setAccountRecoveryStep("menu");
+      setAccountRecoveryUntilIso(null);
+      setPurgeOldPassword("");
+      await doRegister();
+    } catch (error: unknown) {
+      Alert.alert("No se pudo borrar la cuenta anterior", apiErrorDisplayMessage(error));
+    } finally {
+      setPurgeLoading(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    setErrorMsg("");
+    if (!dateOfBirth) { setErrorMsg("Ingresa tu fecha de nacimiento"); return; }
+    if (!isAdult(dateOfBirth)) { setErrorMsg("Debes ser mayor de 18 anos"); return; }
+    if (!password) { setErrorMsg("Ingresa una contrasena"); return; }
+    if (password.length < 8) { setErrorMsg("La contrasena debe tener al menos 8 caracteres"); return; }
+    if (password !== confirmPassword) { setErrorMsg("Las contrasenas no coinciden"); return; }
+
+    await doRegister();
   };
 
   const handleGoogleSuccess = async (idToken: string) => {
@@ -361,7 +404,7 @@ const RegisterScreen = ({ navigation, route }: any) => {
 
       {/* Back button */}
       <TouchableOpacity
-        style={styles.backBtn}
+        style={[styles.backBtn, { top: fabTop }]}
         onPress={() => {
           if (step === 2) { animateStep(); setStep(1); setErrorMsg(""); }
           else navigation.goBack();
@@ -378,12 +421,117 @@ const RegisterScreen = ({ navigation, route }: any) => {
         theme={theme}
       />
 
+      <Modal
+        visible={accountRecoveryModalVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          setAccountRecoveryModalVisible(false);
+          setAccountRecoveryStep("menu");
+        }}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            justifyContent: "center",
+            paddingHorizontal: spacing.lg,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: theme.surface,
+              borderRadius: borderRadius.xl,
+              borderWidth: 1,
+              borderColor: theme.border,
+              padding: spacing.lg,
+            }}
+          >
+            <Text style={{ fontSize: 18, fontWeight: "700", color: theme.text, marginBottom: 8 }}>
+              Cuenta eliminada reciente
+            </Text>
+            <Text style={{ color: theme.textSub, marginBottom: spacing.md, lineHeight: 20, fontSize: 14 }}>
+              {accountRecoveryUntilIso
+                ? `Con este correo hay una cuenta en periodo de recuperación (hasta el ${recoveryDateLabel(
+                    accountRecoveryUntilIso
+                  )}). Puedes recuperarla al iniciar sesión o borrarla para registrarte de nuevo aquí.`
+                : "Con este correo hay una cuenta eliminada en periodo de recuperación. Elige cómo continuar."}
+            </Text>
+            {accountRecoveryStep === "menu" ? (
+              <>
+                <NovaGradientButton
+                  title="Ir a iniciar sesión"
+                  onPress={() => {
+                    setAccountRecoveryModalVisible(false);
+                    setAccountRecoveryStep("menu");
+                    navigation.navigate("Login", {
+                      initialEmail: email.trim().toLowerCase(),
+                      openDeletedRecovery: true,
+                      recoverableUntil: accountRecoveryUntilIso || undefined,
+                    });
+                  }}
+                  style={{ marginBottom: spacing.sm }}
+                />
+                <NovaOutlineButton
+                  title="Borrar la anterior y seguir aquí"
+                  onPress={() => setAccountRecoveryStep("purge_password")}
+                />
+              </>
+            ) : (
+              <>
+                <Text style={{ color: theme.textSub, marginBottom: spacing.sm, fontSize: 13, lineHeight: 19 }}>
+                  Escribe la contraseña de la cuenta que eliminaste (no la nueva). Si solo usabas Google, ve a
+                  Iniciar sesión y usa Google para «empezar de cero» desde allí.
+                </Text>
+                <ModernInput
+                  label="Contraseña de la cuenta anterior"
+                  value={purgeOldPassword}
+                  onChangeText={setPurgeOldPassword}
+                  isPassword
+                  icon="lock-closed-outline"
+                />
+                <View style={{ height: spacing.md }} />
+                <NovaGradientButton
+                  title={purgeLoading ? "Procesando..." : "Confirmar borrado y crear cuenta"}
+                  onPress={handlePurgeDeletedAndRegister}
+                  loading={purgeLoading}
+                  disabled={purgeLoading || loading}
+                />
+                <TouchableOpacity
+                  onPress={() => {
+                    setAccountRecoveryStep("menu");
+                    setPurgeOldPassword("");
+                  }}
+                  style={{ marginTop: spacing.md }}
+                >
+                  <Text style={{ textAlign: "center", color: theme.brandPurple, fontWeight: "600" }}>Volver</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            <TouchableOpacity
+              onPress={() => {
+                setAccountRecoveryModalVisible(false);
+                setAccountRecoveryStep("menu");
+                setPurgeOldPassword("");
+              }}
+              style={{ marginTop: spacing.lg }}
+            >
+              <Text style={{ textAlign: "center", color: theme.textSub, fontSize: 14 }}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <KeyboardAvoidingView
         style={{ flex: 1, width: "100%" }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[
+            styles.scroll,
+            { paddingTop: insets.top + 56, paddingBottom: scrollBottom + spacing.lg },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -579,7 +727,7 @@ const makeStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   },
   backBtn: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 52 : 40,
+    top: 0,
     left: 18,
     zIndex: 10,
     width: 44,
@@ -594,8 +742,6 @@ const makeStyles = (theme: any, isDark: boolean) => StyleSheet.create({
   scroll: {
     flexGrow: 1,
     paddingHorizontal: spacing.lg,
-    paddingTop: 100,
-    paddingBottom: spacing.xxl,
   },
   content: { alignItems: "center" },
 
