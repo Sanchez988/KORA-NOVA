@@ -25,10 +25,31 @@ class ApiService {
       (error) => Promise.reject(error)
     );
 
-    // Interceptor para manejar errores
+    // Interceptor para manejar errores (+ un reintento ante cold start / red inestable)
     this.api.interceptors.response.use(
       (response) => response,
       async (error: AxiosError) => {
+        const cfg = error.config as (typeof error.config & { __koraRetry?: boolean }) | undefined;
+        const noResponse = !error.response;
+        if (noResponse && cfg && !cfg.__koraRetry) {
+          const code = (error as AxiosError & { code?: string }).code;
+          const msg = String(error.message ?? '');
+          const retriable =
+            code === 'ECONNABORTED' ||
+            code === 'ERR_NETWORK' ||
+            msg === 'Network Error' ||
+            /timeout/i.test(msg);
+          if (retriable) {
+            cfg.__koraRetry = true;
+            await new Promise((r) => setTimeout(r, 5000));
+            try {
+              return await this.api.request(cfg);
+            } catch (e2) {
+              error = e2 as AxiosError;
+            }
+          }
+        }
+
         if (error.response?.status === 401) {
           // Token expirado, limpiar almacenamiento
           await AsyncStorage.multiRemove(['token', 'refreshToken', 'user']);
@@ -49,9 +70,12 @@ class ApiService {
             Platform.OS !== 'web' &&
             loopback &&
             !(typeof process !== 'undefined' && process.env.EXPO_PUBLIC_API_URL?.trim());
+          const remoteHttps = /^https:\/\//i.test(base) && !loopback;
           networkError.friendlyMessage = nativeLoopback
             ? 'En el móvil, localhost es el propio celular — no llega al backend del PC. Crea/edita Front/.env con EXPO_PUBLIC_API_URL=http://IP_DE_TU_PC:5000/api (IPv4 Wi‑Fi, mismo router), reinicia Expo. O usa LAN sin túnel: expo start.'
-            : `Sin conexión con la API (${base}). Backend en carpeta Back: npm run dev (puerto 5000); revisa Wi‑Fi o firewall si es un dispositivo físico.`;
+            : remoteHttps
+              ? `No hubo respuesta del servidor (${base}). Comprueba datos o Wi‑Fi. En hosts gratuitos (p. ej. Render) el primer intento puede tardar más de un minuto mientras el servicio «despierta»; vuelve a intentar.`
+              : `Sin conexión con la API (${base}). Backend en carpeta Back: npm run dev (puerto 5000); revisa Wi‑Fi o firewall si es un dispositivo físico.`;
         }
         return Promise.reject(error);
       }
@@ -88,15 +112,18 @@ export async function exchangeGoogleOAuthCode(payload: {
 export function apiErrorDisplayMessage(error: unknown): string {
   const e = error as {
     friendlyMessage?: string;
-    response?: { data?: { message?: string } };
+    response?: { data?: { message?: string; error?: string } };
     message?: string;
   };
-  return (
-    e.friendlyMessage ||
-    e.response?.data?.message ||
-    e.message ||
-    'No se pudo completar la petición.'
-  );
+  const data = e.response?.data;
+  const fromBody =
+    (data && typeof data === 'object' && typeof data.message === 'string' && data.message.trim()
+      ? data.message.trim()
+      : '') ||
+    (data && typeof data === 'object' && typeof data.error === 'string' && data.error.trim()
+      ? data.error.trim()
+      : '');
+  return e.friendlyMessage || fromBody || e.message || 'No se pudo completar la petición.';
 }
 
 export function getConfiguredApiOrigin(): string {
