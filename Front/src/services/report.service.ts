@@ -8,11 +8,13 @@ export type ReportReasonValue =
   | 'HARASSMENT'
   | 'IMPERSONATION'
   | 'UNDERAGE'
+  | 'SPAM'
   | 'OTHER';
 
 export const REPORT_REASON_OPTIONS: { value: ReportReasonValue; label: string }[] = [
   { value: 'INAPPROPRIATE_CONTENT', label: 'Contenido inapropiado' },
   { value: 'HARASSMENT', label: 'Acoso' },
+  { value: 'SPAM', label: 'Spam' },
   { value: 'IMPERSONATION', label: 'Perfil falso' },
   { value: 'UNDERAGE', label: 'Menor de edad' },
   { value: 'OTHER', label: 'Otro' },
