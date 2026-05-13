@@ -22,7 +22,8 @@
       "infoPlist": {
         "NSPhotoLibraryAddUsageDescription": "Kora guarda en tu galería las fotos del chat cuando eliges guardarlas.",
         "NSPhotoLibraryUsageDescription": "Kora usa tu galería para elegir fotos de perfil y del chat.",
-        "NSCameraUsageDescription": "Kora usa la cámara para tomar fotos de tu perfil durante el registro."
+        "NSCameraUsageDescription": "Kora usa la cámara para tomar fotos de tu perfil durante el registro.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -51,7 +52,10 @@
       "favicon": "./assets/favicon.png"
     },
     "updates": {
-      "enabled": false
+      "enabled": true,
+      "url": "https://u.expo.dev/fbfca8e0-b37a-4590-a72b-1f8fcaef3e29",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
     },
     "newArchEnabled": false,
     "extra": {
@@ -77,6 +81,9 @@
         }
       ],
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
   }
 }
