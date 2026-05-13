@@ -16,8 +16,11 @@ import { NovaGradientButton } from "../components/nova/NovaGradientButton";
 import { authService } from "../services/auth.service";
 import { apiErrorDisplayMessage } from "../services/api";
 import { spacing } from "../theme/colors";
+import { useScreenInsets } from "../utils/screenInsets";
+import { wakeBackendHealth } from "../utils/wakeBackendHealth";
 
 export default function ForgotPasswordScreen({ navigation }: { navigation: any }) {
+  const { scrollBottom, insets } = useScreenInsets();
   const { theme } = useTheme();
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -36,18 +39,22 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
     }
     setLoading(true);
     try {
+      await wakeBackendHealth(90000);
       const res = await authService.requestPasswordReset(e);
       if (typeof res.devResetCode === "string" && res.devResetCode.length > 0) {
         setCode(res.devResetCode);
+        const inApp = res.codeDelivery === "in_app";
         Alert.alert(
-          "Código (entorno no productivo)",
-          `Tu código es: ${res.devResetCode}\n\nEn producción este código se envía solo por correo.`,
+          inApp ? "Código en la app" : "Código de recuperación",
+          inApp
+            ? `No se envió correo (SMTP no configurado o error). Tu código es:\n\n${res.devResetCode}\n\nCaduca en 1 hora. Pulsa Continuar e introdúcelo abajo.`
+            : `Tu código es: ${res.devResetCode}\n\nTambién deberías haberlo recibido por correo si el servidor tiene email configurado.`,
           [{ text: "Continuar", onPress: goResetStep }]
         );
       } else {
         Alert.alert(
           "Solicitud registrada",
-          "Si existe una cuenta con ese correo y el servidor tiene email configurado, recibirás un código. Si no, revisa los logs del backend o pide un entorno de desarrollo con código en la respuesta.",
+          "Si existe una cuenta con ese correo, recibirás un código por correo en unos minutos (revisa spam).",
           [{ text: "Tengo el código", onPress: goResetStep }]
         );
       }
@@ -74,6 +81,7 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
     }
     setLoading(true);
     try {
+      await wakeBackendHealth(90000);
       await authService.resetPassword(e, code.trim(), newPassword);
       Alert.alert("Listo", "Ya puedes iniciar sesión con la nueva contraseña.", [
         { text: "OK", onPress: () => navigation.navigate("Login") },
@@ -89,9 +97,13 @@ export default function ForgotPasswordScreen({ navigation }: { navigation: any }
     <KeyboardAvoidingView
       style={[styles.root, { backgroundColor: theme.bg }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
     >
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[
+          styles.scroll,
+          { paddingTop: insets.top + 40, paddingBottom: scrollBottom + spacing.lg },
+        ]}
         keyboardShouldPersistTaps="handled"
       >
         <TouchableOpacity
@@ -172,8 +184,6 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: {
     padding: spacing.lg,
-    paddingTop: 48,
-    paddingBottom: 40,
   },
   backRow: {
     flexDirection: "row",
