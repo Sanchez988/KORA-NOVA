@@ -29,6 +29,7 @@ import { INTEREST_PICK_OPTIONS } from '../data/interestIcons';
 import { HOBBY_PICK_OPTIONS } from '../data/hobbyCatalog';
 import { CommonActions } from '@react-navigation/native';
 import type { UpdateProfileData } from '../services/profile.service';
+import { useScreenInsets } from '../utils/screenInsets';
 
 const ONBOARDING_INTEREST_STEP = 4;
 const MIN_INTEREST_SELECTION = 3;
@@ -108,7 +109,7 @@ function makeOnboardingStyles(theme: Theme) {
       height: '50%',
     },
     screen: { flex: 1, backgroundColor: theme.bg },
-    progressWrap: { flexDirection: 'row', gap: 5, paddingHorizontal: 20, paddingTop: 52, paddingBottom: 8 },
+    progressWrap: { flexDirection: 'row', gap: 5, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 8 },
     progressBar: { flex: 1, height: 4, borderRadius: 2, backgroundColor: surface2, borderWidth: 1, borderColor: border },
     progressBarActive: { backgroundColor: brandPurple, borderColor: brandPurple },
     scrollContent: { paddingHorizontal: 20, paddingBottom: 20, paddingTop: 8 },
@@ -424,6 +425,7 @@ interface OnboardingData {
 
 export default function OnboardingScreen({ navigation }: any) {
   const { theme, isDark } = useTheme();
+  const { insets } = useScreenInsets();
   const styles = useMemo(() => makeOnboardingStyles(theme), [theme]);
   const placeholderColor = isDark ? 'rgba(162,155,254,0.45)' : theme.textMuted;
 
@@ -1438,7 +1440,7 @@ export default function OnboardingScreen({ navigation }: any) {
           />
         </>
       )}
-      <View style={styles.progressWrap}>
+      <View style={[styles.progressWrap, { paddingTop: insets.top + 8 }]}>
         {Array.from({ length: totalSteps }).map((_, i) => (
           <View key={i} style={[styles.progressBar, i < currentStep && styles.progressBarActive]} />
         ))}
@@ -1446,14 +1448,17 @@ export default function OnboardingScreen({ navigation }: any) {
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 20 + insets.bottom },
+        ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         {renderStep()}
       </ScrollView>
 
-      <View style={styles.footer}>
+      <View style={[styles.footer, { paddingBottom: 36 + insets.bottom }]}>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={handleBack}
