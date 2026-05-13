@@ -30,6 +30,7 @@ export const ModernInput: React.FC<ModernInputProps> = ({
   const styles = useMemo(() => makeStyles(theme), [theme]);
   const [isFocused, setIsFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const isMultiline = Boolean(props.multiline);
 
   return (
     <View style={styles.container}>
@@ -37,6 +38,7 @@ export const ModernInput: React.FC<ModernInputProps> = ({
       <View
         style={[
           styles.inputContainer,
+          isMultiline && styles.inputContainerMultiline,
           isFocused && styles.inputFocused,
           error && styles.inputError,
         ]}
@@ -46,22 +48,29 @@ export const ModernInput: React.FC<ModernInputProps> = ({
             name={icon}
             size={20}
             color={isFocused ? theme.brandPurple : theme.textMuted}
-            style={styles.icon}
+            style={[styles.icon, isMultiline && styles.iconMultiline]}
           />
         ) : null}
         <TextInput
           {...props}
           style={[
             styles.input,
+            isMultiline && styles.inputMultiline,
             props.style,
             isPassword && !showPassword && Platform.OS === 'web'
               ? ({ WebkitTextSecurity: 'disc' } as object)
               : undefined,
+            /* Forzar color legible (Android a veces ignora o pierde el del estilo con secureTextEntry). */
+            { color: theme.text },
+            Platform.OS === 'android' ? { includeFontPadding: false } : null,
           ]}
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           placeholderTextColor={theme.textMuted}
           secureTextEntry={isPassword && !showPassword && Platform.OS !== 'web'}
+          selectionColor={theme.brandPurple}
+          cursorColor={theme.text}
+          underlineColorAndroid="transparent"
         />
         {isPassword ? (
           <TouchableOpacity
@@ -101,6 +110,11 @@ function makeStyles(theme: Theme) {
       borderColor: theme.border,
       paddingHorizontal: spacing.md,
     },
+    inputContainerMultiline: {
+      alignItems: 'flex-start',
+      paddingTop: spacing.sm,
+      paddingBottom: spacing.sm,
+    },
     inputFocused: {
       borderColor: theme.brandPurple,
       backgroundColor: theme.isDark ? theme.surface2 : theme.surface,
@@ -123,8 +137,16 @@ function makeStyles(theme: Theme) {
       fontSize: 16,
       color: theme.text,
     },
+    inputMultiline: {
+      textAlignVertical: 'top',
+      minHeight: 96,
+      paddingTop: Platform.OS === 'ios' ? spacing.md : spacing.sm,
+    },
     icon: {
       marginRight: spacing.sm,
+    },
+    iconMultiline: {
+      marginTop: spacing.md - 2,
     },
     eyeIcon: {
       padding: spacing.xs,
