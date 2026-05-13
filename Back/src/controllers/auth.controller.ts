@@ -163,9 +163,10 @@ export const register = async (req: AuthRequest, res: Response, next: NextFuncti
       },
     });
 
-    // Solo enviar email cuando la verificación está activa.
+    /** Si SMTP falla, no dejamos al usuario bloqueado sin código: auto-verificación (misma idea que sin SMTP). */
+    let emailDelivered = true;
     if (shouldRequireEmailVerification) {
-      await sendEmail({
+      emailDelivered = await sendEmail({
         to: email,
         subject: 'Verifica tu correo electrónico - Kora',
         html: `
@@ -175,15 +176,37 @@ export const register = async (req: AuthRequest, res: Response, next: NextFuncti
           ${firebaseUid ? '<p><small>Tu cuenta también ha sido creada en Firebase Authentication.</small></p>' : ''}
         `,
       });
+      if (!emailDelivered) {
+        logger.warn(`Registro: SMTP no entregó correo a ${email}; usuario ${user.id} auto-verificado.`);
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { verified: true, verificationToken: null },
+        });
+      }
     }
 
+    const treatAsDevMode = isDevMode || (shouldRequireEmailVerification && !emailDelivered);
+
+    const includeVerifyCodeInResponse =
+      config.emailVerificationIncludeCodeInResponse &&
+      shouldRequireEmailVerification &&
+      !treatAsDevMode &&
+      !!verificationToken;
+
     res.status(201).json({
-      message: isDevMode
+      message: treatAsDevMode
         ? 'Cuenta creada. Puedes iniciar sesión directamente.'
         : 'Usuario registrado. Por favor verifica tu email.',
       userId: user.id,
-      devMode: isDevMode,
+      devMode: treatAsDevMode,
+      emailDelivered: shouldRequireEmailVerification ? emailDelivered : undefined,
       firebaseEnabled: isFirebaseConfigured(),
+      ...(includeVerifyCodeInResponse
+        ? {
+            verificationCode: verificationToken,
+            codeDelivery: emailDelivered ? ('both' as const) : ('in_app' as const),
+          }
+        : {}),
     });
   } catch (error) {
     next(error);
@@ -323,7 +346,11 @@ export const verifyEmail = async (req: AuthRequest, res: Response, next: NextFun
 // Reenviar verificación
 export const resendVerification = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { email } = req.body;
+    const emailRaw = typeof req.body.email === 'string' ? req.body.email : '';
+    const email = normalizeAuthEmail(emailRaw);
+    if (!email) {
+      throw new AppError('Email inválido', 400);
+    }
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -341,13 +368,31 @@ export const resendVerification = async (req: AuthRequest, res: Response, next: 
       data: { verificationToken },
     });
 
-    await sendEmail({
+    const sent = await sendEmail({
       to: email,
       subject: 'Código de verificación - Kora',
       html: `<p>Tu nuevo código de verificación es: <strong>${verificationToken}</strong></p>`,
     });
 
-    res.json({ message: 'Código de verificación reenviado' });
+    const includeCode = config.emailVerificationIncludeCodeInResponse;
+
+    if (!sent) {
+      logger.warn(`Reenvío verificación: SMTP falló para ${email}; código en respuesta (in_app).`);
+      res.json({
+        message:
+          'No pudimos enviar el correo. Usa el código que muestra la app para verificar tu cuenta (también revisa spam).',
+        codeDelivery: 'in_app' as const,
+        verificationCode: verificationToken,
+      });
+      return;
+    }
+
+    res.json({
+      message: 'Código de verificación reenviado',
+      ...(includeCode
+        ? { verificationCode: verificationToken, codeDelivery: 'both' as const }
+        : { codeDelivery: 'email' as const }),
+    });
   } catch (error) {
     next(error);
   }
@@ -376,24 +421,37 @@ export const requestPasswordReset = async (req: AuthRequest, res: Response, next
       data: { resetToken, resetTokenExpiry },
     });
 
-    try {
-      await sendEmail({
-        to: email,
-        subject: 'Recuperación de contraseña - Kora',
-        html: `<p>Tu código de recuperación es: <strong>${resetToken}</strong></p>`,
-      });
-    } catch (err) {
-      logger.warn('requestPasswordReset: envío de correo falló', err);
+    const sent = await sendEmail({
+      to: email,
+      subject: 'Recuperación de contraseña - Kora',
+      html: `<p>Tu código de recuperación es: <strong>${resetToken}</strong></p><p>Caduca en 1 hora.</p>`,
+    });
+
+    if (!sent) {
+      logger.warn(
+        `Recuperación de contraseña: correo no enviado a ${email}. Revisa EMAIL_USER/EMAIL_PASSWORD y SMTP. Código generado: ${resetToken}`
+      );
     }
 
-    const isDev = config.env === 'development';
-    if (isDev) {
-      logger.info(`[dev] Código recuperación contraseña para ${email}: ${resetToken}`);
-    }
+    /**
+     * Código en la respuesta JSON cuando:
+     * - desarrollo, o
+     * - PASSWORD_RESET_DEV_CODE_IN_RESPONSE, o
+     * - el correo no se pudo enviar (sin SMTP / error): alternativa sin depender del email.
+     */
+    const exposeResetCode =
+      config.env === 'development' ||
+      config.passwordResetExposeCodeInResponse ||
+      !sent;
+
+    const message = sent
+      ? 'Si el email existe, recibirás un código de recuperación'
+      : 'No pudimos enviar el correo. El código de recuperación aparece en la app (caduca en 1 hora).';
 
     res.json({
-      message: 'Si el email existe, recibirás un código de recuperación',
-      ...(isDev ? { devResetCode: resetToken } : {}),
+      message,
+      codeDelivery: sent ? 'email' : 'in_app',
+      ...(exposeResetCode ? { devResetCode: resetToken } : {}),
     });
   } catch (error) {
     next(error);
