@@ -92,8 +92,14 @@ export const uploadToCloudinary = async (file: Express.Multer.File, options: Upl
   } catch (error) {
     logger.error(`Error al subir a Cloudinary: ${error}`);
     /**
-     * Fallback de desarrollo/soporte:
-     * si Cloudinary falla (credenciales, cuota, red), no bloqueamos el flujo de perfil.
+     * En producción (p. ej. Render) el disco local es efímero: guardar en `/uploads` hace que
+     * las URLs fallen al reiniciar el dyno. Solo Cloudinary u otro almacenamiento persistente.
+     */
+    if (config.env === 'production') {
+      throw error instanceof Error ? error : new Error(String(error));
+    }
+    /**
+     * Desarrollo: fallback local si Cloudinary falla (credenciales, cuota, red).
      */
     try {
       return await saveBufferToLocalUploads(file);
