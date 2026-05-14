@@ -6,8 +6,6 @@ Red social móvil para conocer gente, chatear con matches, publicar historias y 
 
 **Stack:** Expo · React Native · TypeScript · Node.js · Express · Prisma · PostgreSQL · Docker · Socket.IO · EAS Build / Update
 
-> La guía está inspirada en un README tipo “KORA” (Flutter + Django), pero **todo lo que ves aquí corresponde a esta app**: rutas bajo `/api`, sin `/api/v1/`, y sin servicios Nginx/Prometheus del otro stack salvo que los añadas tú en tu infraestructura.
-
 ---
 
 ## Índice
